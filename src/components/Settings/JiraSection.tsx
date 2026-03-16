@@ -49,7 +49,7 @@ export const JiraSection = ({ appSettings, onSaveAppSettings, onUpdateLocalSetti
     <div className="space-y-6">
       <div>
         <h2 className="text-lg font-semibold mb-1">JIRA Integration</h2>
-        <p className="text-sm text-muted-foreground">Connect to JIRA Cloud to poll issues and update status</p>
+        <p className="text-sm text-muted-foreground">Connect to JIRA to poll issues and update status</p>
       </div>
 
       <div className="border border-border bg-card p-6">
@@ -76,22 +76,21 @@ export const JiraSection = ({ appSettings, onSaveAppSettings, onUpdateLocalSetti
           {/* Domain */}
           <div>
             <label className="text-sm font-medium block mb-2">JIRA Domain</label>
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">https://</span>
-              <input
-                type="text"
-                value={appSettings.jiraDomain}
-                onChange={(e) => onUpdateLocalSettings({ jiraDomain: e.target.value })}
-                onBlur={() => {
-                  if (appSettings.jiraDomain) {
-                    onSaveAppSettings({ jiraDomain: appSettings.jiraDomain });
-                  }
-                }}
-                placeholder="mycompany"
-                className="flex-1 px-3 py-2 bg-secondary border border-border text-sm font-mono focus:border-foreground focus:outline-none"
-              />
-              <span className="text-sm text-muted-foreground">.atlassian.net</span>
-            </div>
+            <input
+              type="text"
+              value={appSettings.jiraDomain}
+              onChange={(e) => onUpdateLocalSettings({ jiraDomain: e.target.value })}
+              onBlur={() => {
+                if (appSettings.jiraDomain) {
+                  onSaveAppSettings({ jiraDomain: appSettings.jiraDomain });
+                }
+              }}
+              placeholder="mycompany.atlassian.net or issues.example.com"
+              className="w-full px-3 py-2 bg-secondary border border-border text-sm font-mono focus:border-foreground focus:outline-none"
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              Full hostname — e.g. mycompany.atlassian.net or your self-hosted domain
+            </p>
           </div>
 
           {/* Email */}
@@ -184,7 +183,7 @@ export const JiraSection = ({ appSettings, onSaveAppSettings, onUpdateLocalSetti
         <ol className="text-sm text-muted-foreground space-y-2 list-decimal list-inside">
           <li>Go to your Atlassian account security settings</li>
           <li>Create an API token at <code className="bg-secondary px-1">id.atlassian.com/manage-profile/security/api-tokens</code></li>
-          <li>Enter your JIRA domain (the subdomain before .atlassian.net)</li>
+          <li>Enter your JIRA hostname (e.g. mycompany.atlassian.net or your self-hosted domain)</li>
           <li>Enter the email associated with your Atlassian account</li>
           <li>Paste your API token and click &quot;Test Connection&quot;</li>
           <li>Create an automation with JIRA as the source</li>

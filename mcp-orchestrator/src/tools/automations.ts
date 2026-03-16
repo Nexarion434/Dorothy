@@ -42,6 +42,19 @@ import { apiRequest } from "../utils/api.js";
 const execAsyncRaw = promisify(exec);
 
 /**
+ * Normalize a JIRA domain value to a full hostname.
+ * Handles both legacy subdomain-only values (e.g. "mycompany") and
+ * full hostnames (e.g. "mycompany.atlassian.net", "issues.example.com").
+ */
+function normalizeJiraHost(domain: string): string {
+  let host = domain.trim().replace(/^https?:\/\//, '').replace(/\/+$/, '');
+  if (!host.includes('.')) {
+    host = `${host}.atlassian.net`;
+  }
+  return host;
+}
+
+/**
  * Validate that a webhook URL is safe (not targeting internal/private networks).
  * Requires HTTPS and rejects localhost, private IPs, and link-local addresses.
  */
@@ -396,7 +409,8 @@ async function pollJira(config: JiraSourceConfig, automation: Automation): Promi
       }
     }
 
-    const searchUrl = `https://${domain}.atlassian.net/rest/api/3/search/jql`;
+    const jiraHost = normalizeJiraHost(domain);
+    const searchUrl = `https://${jiraHost}/rest/api/3/search/jql`;
     const res = await fetch(searchUrl, {
       method: "POST",
       headers,
@@ -424,7 +438,7 @@ async function pollJira(config: JiraSourceConfig, automation: Automation): Promi
         id: createItemId("jira", domain, "issue", issue.key),
         type: fields.issuetype?.name || "Issue",
         title: fields.summary || issue.key,
-        url: `https://${domain}.atlassian.net/browse/${issue.key}`,
+        url: `https://${jiraHost}/browse/${issue.key}`,
         author: fields.reporter?.displayName || "Unknown",
         body: descriptionText,
         labels: fields.labels || [],
@@ -511,7 +525,7 @@ async function sendOutput(output: OutputConfig, message: string, variables: Reco
         const jiraCreds = loadJiraCredentials({ domain: jiraDomain, projectKeys: [] } as JiraSourceConfig);
         if (jiraCreds) {
           const jiraHeaders = jiraAuthHeaders(jiraCreds.email, jiraCreds.apiToken);
-          await fetch(`https://${jiraCreds.domain}.atlassian.net/rest/api/3/issue/${issueKey}/comment`, {
+          await fetch(`https://${normalizeJiraHost(jiraCreds.domain)}/rest/api/3/issue/${issueKey}/comment`, {
             method: "POST",
             headers: jiraHeaders,
             body: JSON.stringify({
@@ -537,7 +551,8 @@ async function sendOutput(output: OutputConfig, message: string, variables: Reco
         if (jiraCreds) {
           const jiraHeaders = jiraAuthHeaders(jiraCreds.email, jiraCreds.apiToken);
           // Get available transitions
-          const transRes = await fetch(`https://${jiraCreds.domain}.atlassian.net/rest/api/3/issue/${transIssueKey}/transitions`, {
+          const jiraTransHost = normalizeJiraHost(jiraCreds.domain);
+          const transRes = await fetch(`https://${jiraTransHost}/rest/api/3/issue/${transIssueKey}/transitions`, {
             headers: jiraHeaders,
           });
           if (transRes.ok) {
@@ -546,7 +561,7 @@ async function sendOutput(output: OutputConfig, message: string, variables: Reco
               t.name.toLowerCase() === targetTransition.toLowerCase()
             );
             if (transition) {
-              await fetch(`https://${jiraCreds.domain}.atlassian.net/rest/api/3/issue/${transIssueKey}/transitions`, {
+              await fetch(`https://${jiraTransHost}/rest/api/3/issue/${transIssueKey}/transitions`, {
                 method: "POST",
                 headers: jiraHeaders,
                 body: JSON.stringify({ transition: { id: transition.id } }),
@@ -1337,7 +1352,8 @@ ${run.agentOutput ? `Output: ${run.agentOutput.slice(0, 200)}...` : ""}`,
 
         // Transition if requested
         if (transitionName) {
-          const transRes = await fetch(`https://${creds.domain}.atlassian.net/rest/api/3/issue/${issueKey}/transitions`, {
+          const updateHost = normalizeJiraHost(creds.domain);
+          const transRes = await fetch(`https://${updateHost}/rest/api/3/issue/${issueKey}/transitions`, {
             headers,
           });
           if (transRes.ok) {
@@ -1346,7 +1362,7 @@ ${run.agentOutput ? `Output: ${run.agentOutput.slice(0, 200)}...` : ""}`,
               t.name.toLowerCase() === transitionName.toLowerCase()
             );
             if (transition) {
-              const doTransRes = await fetch(`https://${creds.domain}.atlassian.net/rest/api/3/issue/${issueKey}/transitions`, {
+              const doTransRes = await fetch(`https://${updateHost}/rest/api/3/issue/${issueKey}/transitions`, {
                 method: "POST",
                 headers,
                 body: JSON.stringify({ transition: { id: transition.id } }),
@@ -1368,7 +1384,7 @@ ${run.agentOutput ? `Output: ${run.agentOutput.slice(0, 200)}...` : ""}`,
 
         // Add comment if requested
         if (comment) {
-          const commentRes = await fetch(`https://${creds.domain}.atlassian.net/rest/api/3/issue/${issueKey}/comment`, {
+          const commentRes = await fetch(`https://${updateHost}/rest/api/3/issue/${issueKey}/comment`, {
             method: "POST",
             headers,
             body: JSON.stringify({

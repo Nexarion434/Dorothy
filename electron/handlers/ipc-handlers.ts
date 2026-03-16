@@ -22,6 +22,20 @@ import { writeProgrammaticInput } from '../core/pty-manager';
 import { extractStatusLine } from '../utils/ansi';
 import { scheduleTick } from '../utils/agents-tick';
 
+/**
+ * Normalize a JIRA domain value to a full hostname.
+ * Handles both legacy subdomain-only values (e.g. "mycompany") and
+ * full hostnames (e.g. "mycompany.atlassian.net", "issues.example.com").
+ */
+function normalizeJiraHost(domain: string): string {
+  let host = domain.trim().replace(/^https?:\/\//, '').replace(/\/+$/, '');
+  // Legacy: bare subdomain without dots → append .atlassian.net
+  if (!host.includes('.')) {
+    host = `${host}.atlassian.net`;
+  }
+  return host;
+}
+
 // Dependencies interface for dependency injection
 export interface IpcHandlerDependencies {
   // State
@@ -1521,7 +1535,8 @@ function registerAppSettingsHandlers(deps: IpcHandlerDependencies): void {
 
     try {
       const auth = Buffer.from(`${appSettings.jiraEmail}:${appSettings.jiraApiToken}`).toString('base64');
-      const res = await fetch(`https://${appSettings.jiraDomain}.atlassian.net/rest/api/3/myself`, {
+      const jiraHost = normalizeJiraHost(appSettings.jiraDomain);
+      const res = await fetch(`https://${jiraHost}/rest/api/3/myself`, {
         headers: {
           'Authorization': `Basic ${auth}`,
           'Content-Type': 'application/json',

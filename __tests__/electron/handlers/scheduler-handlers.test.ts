@@ -117,6 +117,8 @@ describe('scheduler-handlers', () => {
         verboseModeEnabled: false,
         autoCheckUpdates: true,
         defaultProvider: 'claude' as const,
+        opencodeEnabled: false,
+        opencodeDefaultModel: '',
         cliPaths: { claude: '', codex: '', gemini: '', opencode: '', gws: '', gcloud: '', gh: '', node: '', additionalPaths: [] },
       }),
     });
