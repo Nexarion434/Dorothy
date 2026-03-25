@@ -70,8 +70,8 @@ try {
 
   // 5. Run electron-builder
   const builderCmd = dirFlag
-    ? `npx electron-builder ${platform} --dir`
-    : `npx electron-builder ${platform}`;
+    ? `npx electron-builder ${platform} --dir --publish never`
+    : `npx electron-builder ${platform} --publish never`;
   run(builderCmd);
 
 } catch (err) {
