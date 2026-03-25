@@ -32,8 +32,8 @@ jobs:
       - name: Run tests
         run: npm test
 
-      - name: Pack Windows (no installer, for validation)
-        run: npm run electron:pack:win
+      - name: Build Windows installer (NSIS)
+        run: npm run electron:build:win
         env:
           ELECTRON_BUILD: '1'
 
@@ -42,6 +42,6 @@ jobs:
         if: success()
         with:
           name: dorothy-windows
-          path: release/**/*.exe
-          if-no-files-found: ignore
+          path: release/*.exe
+          if-no-files-found: warn
           retention-days: 7
