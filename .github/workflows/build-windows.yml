@@ -5,6 +5,7 @@ on:
     branches:
       - feat/windows-support
       - main
+      - claude/clone-github-repo-rvM1A
   pull_request:
     branches:
       - main
