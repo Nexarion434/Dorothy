@@ -91,6 +91,7 @@ import { registerCLIPathsHandlers } from './handlers/cli-paths-handlers';
 import { registerKanbanHandlers } from './handlers/kanban-handlers';
 import { registerVaultHandlers } from './handlers/vault-handlers';
 import { registerWorldHandlers } from './handlers/world-handlers';
+import { getShell, getShellArgs } from './utils/platform-paths';
 import { initVaultDb, closeVaultDb } from './services/vault-db';
 import { initAutoUpdater, checkForUpdates, setMainWindowGetter } from './services/update-checker';
 import { initKanbanAutomation, findMatchingAgent, createAgentForTask, startAgentForTask } from './services/kanban-automation';
@@ -411,7 +412,7 @@ app.whenReady().then(async () => {
       const pty = await import('node-pty');
 
       const id = uuidv4();
-      const shell = process.env.SHELL || '/bin/zsh';
+      const shell = getShell();
       let cwd = config.projectPath;
 
       if (!fs.existsSync(cwd)) {
@@ -421,7 +422,7 @@ app.whenReady().then(async () => {
       // Always include world-builder skill
       const allSkills = [...new Set([...config.skills, 'world-builder'])];
 
-      const ptyProcess = pty.spawn(shell, ['-l'], {
+      const ptyProcess = pty.spawn(shell, getShellArgs(), {
         name: 'xterm-256color',
         cols: 120,
         rows: 30,
@@ -543,9 +544,15 @@ app.whenReady().then(async () => {
 
       // For long commands, write to a temp script to avoid PTY line-wrapping mangling
       if (fullCommand.length > 100) {
-        const tmpScript = path.join(os.tmpdir(), `claude-agent-${agentId}.sh`);
-        fs.writeFileSync(tmpScript, `#!/bin/bash\n${fullCommand}\n`, { mode: 0o755 });
-        writeProgrammaticInput(ptyProcess, `bash '${tmpScript}'`);
+        if (process.platform === 'win32') {
+          const tmpScript = path.join(os.tmpdir(), `claude-agent-${agentId}.ps1`);
+          fs.writeFileSync(tmpScript, fullCommand + '\n');
+          writeProgrammaticInput(ptyProcess, `powershell -NonInteractive -File "${tmpScript}"`);
+        } else {
+          const tmpScript = path.join(os.tmpdir(), `claude-agent-${agentId}.sh`);
+          fs.writeFileSync(tmpScript, `#!/bin/bash\n${fullCommand}\n`, { mode: 0o755 });
+          writeProgrammaticInput(ptyProcess, `bash '${tmpScript}'`);
+        }
       } else {
         writeProgrammaticInput(ptyProcess, fullCommand);
       }
