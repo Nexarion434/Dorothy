@@ -33,6 +33,9 @@ jobs:
       - name: Run tests
         run: npm test
 
+      - name: Generate icon.ico from PNG
+        run: magick public/icon-512.png -define icon:auto-resize=256,128,64,48,32,16 public/icon.ico
+
       - name: Build Windows installer (NSIS)
         run: npm run electron:build:win
         env:

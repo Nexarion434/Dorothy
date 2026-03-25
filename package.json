@@ -121,13 +121,11 @@
     },
     "win": {
       "target": ["nsis", "zip"],
-      "icon": "public/icon-512.png"
+      "icon": "public/icon.ico"
     },
     "nsis": {
       "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
-      "installerIcon": "public/icon-512.png",
-      "uninstallerIcon": "public/icon-512.png"
+      "allowToChangeInstallationDirectory": true
     },
     "dmg": {
       "title": "Dorothy",
