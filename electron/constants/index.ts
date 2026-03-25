@@ -1,10 +1,11 @@
 import * as path from 'path';
 import * as os from 'os';
+import { getDorothyDir } from '../utils/platform-paths';
 
 export const API_PORT = 31415;
 
 export const OLD_DATA_DIR = path.join(os.homedir(), '.claude-manager');
-export const DATA_DIR = path.join(os.homedir(), '.dorothy');
+export const DATA_DIR = getDorothyDir();
 export const AGENTS_FILE = path.join(DATA_DIR, 'agents.json');
 export const APP_SETTINGS_FILE = path.join(DATA_DIR, 'app-settings.json');
 export const KANBAN_FILE = path.join(DATA_DIR, 'kanban-tasks.json');

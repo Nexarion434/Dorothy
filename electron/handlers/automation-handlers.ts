@@ -5,13 +5,14 @@ import * as os from 'os';
 import { spawn } from 'child_process';
 import { getProvider } from '../providers';
 import type { AgentProvider } from '../types';
+import { getDorothyDir } from '../utils/platform-paths';
 
 // ============================================
 // Automation IPC handlers
 // Interacts with the same storage as MCP tools
 // ============================================
 
-const AUTOMATIONS_DIR = path.join(os.homedir(), '.dorothy');
+const AUTOMATIONS_DIR = getDorothyDir();
 const AUTOMATIONS_FILE = path.join(AUTOMATIONS_DIR, 'automations.json');
 const RUNS_FILE = path.join(AUTOMATIONS_DIR, 'automations-runs.json');
 
@@ -106,7 +107,7 @@ function generateId(): string {
 /** Read defaultProvider from app-settings.json, falling back to 'claude' */
 function getDefaultProvider(): AgentProvider {
   try {
-    const settingsFile = path.join(os.homedir(), '.dorothy', 'app-settings.json');
+    const settingsFile = path.join(getDorothyDir(), 'app-settings.json');
     if (fs.existsSync(settingsFile)) {
       const settings = JSON.parse(fs.readFileSync(settingsFile, 'utf-8'));
       if (settings.defaultProvider && ['claude', 'codex', 'gemini'].includes(settings.defaultProvider)) {
@@ -152,7 +153,7 @@ async function getCLIPath(providerId: string = 'claude'): Promise<string> {
 
   // Check user-configured path in app-settings.json
   try {
-    const settingsFile = path.join(os.homedir(), '.dorothy', 'app-settings.json');
+    const settingsFile = path.join(getDorothyDir(), 'app-settings.json');
     if (fs.existsSync(settingsFile)) {
       const settings = JSON.parse(fs.readFileSync(settingsFile, 'utf-8'));
       const configuredPath = settings.cliPaths?.[binaryName];
@@ -162,6 +163,23 @@ async function getCLIPath(providerId: string = 'claude'): Promise<string> {
     }
   } catch {
     // Ignore settings read errors
+  }
+
+  if (process.platform === 'win32') {
+    // On Windows, look for binary.cmd or binary.exe in common locations
+    const winExts = ['.cmd', '.exe', ''];
+    const winPaths = [
+      path.join(os.homedir(), 'AppData', 'Local', 'Programs', binaryName),
+      path.join(os.homedir(), 'AppData', 'Roaming', 'npm'),
+      'C:\\Program Files\\nodejs',
+    ];
+    for (const dir of winPaths) {
+      for (const ext of winExts) {
+        const candidate = path.join(dir, `${binaryName}${ext}`);
+        if (fs.existsSync(candidate)) return candidate;
+      }
+    }
+    return `${binaryName}.cmd`;
   }
 
   // Method 1: Run which with bash to get proper PATH (including nvm, etc.)
@@ -239,15 +257,16 @@ async function createAutomationLaunchdJob(automation: Automation): Promise<void>
 
   const [minute, hour, dayOfMonth, , dayOfWeek] = cronSchedule.split(' ');
 
-  const logPath = path.join(os.homedir(), '.dorothy', 'logs', `automation-${automation.id}.log`);
-  const errorLogPath = path.join(os.homedir(), '.dorothy', 'logs', `automation-${automation.id}.error.log`);
+  const logPath = path.join(getDorothyDir(), 'logs', `automation-${automation.id}.log`);
+  const errorLogPath = path.join(getDorothyDir(), 'logs', `automation-${automation.id}.error.log`);
   const logsDir = path.dirname(logPath);
   if (!fs.existsSync(logsDir)) {
     fs.mkdirSync(logsDir, { recursive: true });
   }
 
   // Create script to run
-  const scriptPath = path.join(os.homedir(), '.dorothy', 'scripts', `automation-${automation.id}.sh`);
+  const scriptExt = process.platform === 'win32' ? '.ps1' : '.sh';
+  const scriptPath = path.join(getDorothyDir(), 'scripts', `automation-${automation.id}${scriptExt}`);
   const scriptsDir = path.dirname(scriptPath);
   if (!fs.existsSync(scriptsDir)) {
     fs.mkdirSync(scriptsDir, { recursive: true });
@@ -341,7 +360,8 @@ ${scheduleXml}
 async function removeAutomationLaunchdJob(automationId: string): Promise<void> {
   const label = `com.dorothy.automation.${automationId}`;
   const plistPath = path.join(os.homedir(), 'Library', 'LaunchAgents', `${label}.plist`);
-  const scriptPath = path.join(os.homedir(), '.dorothy', 'scripts', `automation-${automationId}.sh`);
+  const scriptExt = process.platform === 'win32' ? '.ps1' : '.sh';
+  const scriptPath = path.join(getDorothyDir(), 'scripts', `automation-${automationId}${scriptExt}`);
 
   // Unload from launchd
   const uid = process.getuid?.() || 501;
@@ -547,12 +567,14 @@ export function registerAutomationHandlers(): void {
       }
 
       // Run the script directly
-      const scriptPath = path.join(os.homedir(), '.dorothy', 'scripts', `automation-${id}.sh`);
+      const scriptExt = process.platform === 'win32' ? '.ps1' : '.sh';
+      const scriptPath = path.join(getDorothyDir(), 'scripts', `automation-${id}${scriptExt}`);
       if (fs.existsSync(scriptPath)) {
-        spawn('bash', [scriptPath], {
-          detached: true,
-          stdio: 'ignore',
-        }).unref();
+        if (process.platform === 'win32') {
+          spawn('powershell.exe', ['-File', scriptPath], { detached: true, stdio: 'ignore' }).unref();
+        } else {
+          spawn('bash', [scriptPath], { detached: true, stdio: 'ignore' }).unref();
+        }
         return { success: true, message: 'Automation triggered' };
       }
 
@@ -566,7 +588,7 @@ export function registerAutomationHandlers(): void {
   // Get automation logs - parsed into individual runs
   ipcMain.handle('automation:getLogs', async (_event, id: string) => {
     try {
-      const logPath = path.join(os.homedir(), '.dorothy', 'logs', `automation-${id}.log`);
+      const logPath = path.join(getDorothyDir(), 'logs', `automation-${id}.log`);
 
       if (!fs.existsSync(logPath)) {
         return { runs: [], logs: 'No logs available yet. The automation has not run.' };

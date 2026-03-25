@@ -1,0 +1,47 @@
+name: Windows Build
+
+on:
+  push:
+    branches:
+      - feat/windows-support
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build-win:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Rebuild native modules
+        run: npx @electron/rebuild
+
+      - name: Run tests
+        run: npm test
+
+      - name: Pack Windows (no installer, for validation)
+        run: npm run electron:pack:win
+        env:
+          ELECTRON_BUILD: '1'
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: dorothy-windows
+          path: release/**/*.exe
+          if-no-files-found: ignore
+          retention-days: 7
