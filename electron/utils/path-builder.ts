@@ -23,7 +23,7 @@ export function buildFullPath(extraPaths: string[] = []): string {
   ];
 
   // Add nvm node version directories on Unix
-  if (process.platform !== 'win32') {
+  if (os.platform() !== 'win32') {
     const nvmDir = path.join(homeDir, '.nvm/versions/node');
     if (fs.existsSync(nvmDir)) {
       try {

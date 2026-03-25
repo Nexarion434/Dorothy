@@ -5,7 +5,7 @@ import * as os from 'os';
 import { spawn } from 'child_process';
 import { getProvider } from '../providers';
 import type { AgentProvider } from '../types';
-import { getDorothyDir } from '../utils/platform-paths';
+import { getDorothyDir, getShell } from '../utils/platform-paths';
 
 // ============================================
 // Automation IPC handlers
@@ -165,7 +165,7 @@ async function getCLIPath(providerId: string = 'claude'): Promise<string> {
     // Ignore settings read errors
   }
 
-  if (process.platform === 'win32') {
+  if (os.platform() === 'win32') {
     // On Windows, look for binary.cmd or binary.exe in common locations
     const winExts = ['.cmd', '.exe', ''];
     const winPaths = [
@@ -265,7 +265,7 @@ async function createAutomationLaunchdJob(automation: Automation): Promise<void>
   }
 
   // Create script to run
-  const scriptExt = process.platform === 'win32' ? '.ps1' : '.sh';
+  const scriptExt = os.platform() === 'win32' ? '.ps1' : '.sh';
   const scriptPath = path.join(getDorothyDir(), 'scripts', `automation-${automation.id}${scriptExt}`);
   const scriptsDir = path.dirname(scriptPath);
   if (!fs.existsSync(scriptsDir)) {
@@ -360,7 +360,7 @@ ${scheduleXml}
 async function removeAutomationLaunchdJob(automationId: string): Promise<void> {
   const label = `com.dorothy.automation.${automationId}`;
   const plistPath = path.join(os.homedir(), 'Library', 'LaunchAgents', `${label}.plist`);
-  const scriptExt = process.platform === 'win32' ? '.ps1' : '.sh';
+  const scriptExt = os.platform() === 'win32' ? '.ps1' : '.sh';
   const scriptPath = path.join(getDorothyDir(), 'scripts', `automation-${automationId}${scriptExt}`);
 
   // Unload from launchd
@@ -567,10 +567,10 @@ export function registerAutomationHandlers(): void {
       }
 
       // Run the script directly
-      const scriptExt = process.platform === 'win32' ? '.ps1' : '.sh';
+      const scriptExt = os.platform() === 'win32' ? '.ps1' : '.sh';
       const scriptPath = path.join(getDorothyDir(), 'scripts', `automation-${id}${scriptExt}`);
       if (fs.existsSync(scriptPath)) {
-        if (process.platform === 'win32') {
+        if (os.platform() === 'win32') {
           spawn('powershell.exe', ['-File', scriptPath], { detached: true, stdio: 'ignore' }).unref();
         } else {
           spawn('bash', [scriptPath], { detached: true, stdio: 'ignore' }).unref();
