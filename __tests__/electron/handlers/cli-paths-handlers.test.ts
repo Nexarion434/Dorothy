@@ -18,7 +18,7 @@ vi.mock('electron', () => ({
 
 vi.mock('os', async (importOriginal) => {
   const mod = await importOriginal<typeof import('os')>();
-  return { ...mod, homedir: () => tmpDir };
+  return { ...mod, homedir: () => tmpDir, platform: () => 'linux' as NodeJS.Platform };
 });
 
 vi.mock('child_process', () => ({

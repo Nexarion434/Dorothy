@@ -70,7 +70,14 @@ beforeEach(() => {
   mockWebContentsSend.mockClear();
 });
 
-afterEach(() => {
+afterEach(async () => {
+  // Close any active log watchers before removing temp dir (avoids EPERM on Windows)
+  for (const taskId of ['watch-task', 'dup-watch', 'stream-task', 'unwatch-task']) {
+    const fn = handlers.get('scheduler:unwatchLogs');
+    if (fn) {
+      try { await fn({}, taskId); } catch { /* ignore */ }
+    }
+  }
   vi.restoreAllMocks();
   if (fs.existsSync(tmpDir)) fs.rmSync(tmpDir, { recursive: true, force: true });
 });

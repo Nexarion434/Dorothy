@@ -7,7 +7,7 @@ import * as os from 'os';
  * - macOS/Linux : ~/.dorothy
  */
 export const getDorothyDir = (): string =>
-  process.platform === 'win32'
+  os.platform() === 'win32'
     ? path.join(os.homedir(), 'AppData', 'Roaming', 'Dorothy')
     : path.join(os.homedir(), '.dorothy');
 
@@ -24,7 +24,7 @@ export const getClaudeDir = (): string =>
  * - macOS/Linux : $SHELL or /bin/bash
  */
 export const getShell = (): string =>
-  process.platform === 'win32'
+  os.platform() === 'win32'
     ? (process.env.COMSPEC || 'powershell.exe')
     : (process.env.SHELL || '/bin/bash');
 
@@ -33,7 +33,7 @@ export const getShell = (): string =>
  * PowerShell does not support -l; Unix shells do.
  */
 export const getShellArgs = (): string[] =>
-  process.platform === 'win32' ? [] : ['-l'];
+  os.platform() === 'win32' ? [] : ['-l'];
 
 /**
  * Returns the file extension for CLI executables on the current platform.
@@ -41,13 +41,13 @@ export const getShellArgs = (): string[] =>
  * - macOS/Linux : ''
  */
 export const getCliExt = (): string =>
-  process.platform === 'win32' ? '.cmd' : '';
+  os.platform() === 'win32' ? '.cmd' : '';
 
 /**
  * Returns platform-specific extra PATH directories for spawned processes.
  */
 export const getExtraPaths = (): string[] => {
-  if (process.platform === 'win32') {
+  if (os.platform() === 'win32') {
     return [
       path.join(os.homedir(), 'AppData', 'Local', 'Programs', 'Claude'),
       path.join(os.homedir(), 'AppData', 'Local', 'Programs'),

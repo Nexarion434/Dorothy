@@ -24,7 +24,7 @@ export interface CLIPathsHandlerDependencies {
 async function detectCLIPaths(): Promise<{ claude: string; codex: string; gemini: string; opencode: string; pi: string; gws: string; gcloud: string; gh: string; node: string }> {
   const homeDir = os.homedir();
   const ext = getCliExt();
-  const isWin = process.platform === 'win32';
+  const isWin = os.platform() === 'win32';
   const pathSep = path.delimiter; // ':' on Unix, ';' on Windows
 
   const paths = { claude: '', codex: '', gemini: '', opencode: '', pi: '', gws: '', gcloud: '', gh: '', node: '' };
