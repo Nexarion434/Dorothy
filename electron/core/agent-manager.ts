@@ -8,6 +8,7 @@ import { AgentStatus, AppSettings } from '../types';
 import { broadcastToAllWindows } from '../utils/broadcast';
 import { AGENTS_FILE, DATA_DIR } from '../constants';
 import { ensureDataDir, isSuperAgent } from '../utils';
+import { getShell, getShellArgs, getDorothyDir, getExtraPaths } from '../utils/platform-paths';
 import { ptyProcesses } from './pty-manager';
 import { buildFullPath } from '../utils/path-builder';
 import { getProvider } from '../providers';
@@ -229,7 +230,7 @@ export async function initAgentPty(
   handleStatusChangeNotificationCallback: (agent: AgentStatus, newStatus: string) => void,
   saveAgentsCallback: () => void
 ): Promise<string> {
-  const shell = '/bin/bash';
+  const shell = getShell();
   let cwd = agent.worktreePath || agent.projectPath;
 
   if (!fs.existsSync(cwd)) {
@@ -243,7 +244,7 @@ export async function initAgentPty(
   const cliExtraPaths: string[] = [];
   let savedSettings: Record<string, unknown> = {};
   try {
-    const settingsFile = path.join(os.homedir(), '.dorothy', 'app-settings.json');
+    const settingsFile = path.join(getDorothyDir(), 'app-settings.json');
     if (fs.existsSync(settingsFile)) {
       savedSettings = JSON.parse(fs.readFileSync(settingsFile, 'utf-8'));
       const cliPaths = savedSettings.cliPaths as Record<string, unknown> | undefined;
@@ -290,7 +291,7 @@ export async function initAgentPty(
   const agentProvider = getProvider(agent.provider);
   const providerEnvVars = agentProvider.getPtyEnvVars(agent.id, agent.projectPath, agent.skills);
 
-  const ptyProcess = pty.spawn(shell, ['-l'], {
+  const ptyProcess = pty.spawn(shell, getShellArgs(), {
     name: 'xterm-256color',
     cols: 120,
     rows: 30,

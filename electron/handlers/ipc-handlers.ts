@@ -20,6 +20,7 @@ import { decodeProjectPath } from '../utils/decode-project-path';
 import { getProvider, getAllProviders } from '../providers';
 import { writeProgrammaticInput } from '../core/pty-manager';
 import { extractStatusLine } from '../utils/ansi';
+import { getShell, getShellArgs } from '../utils/platform-paths';
 import { scheduleTick } from '../utils/agents-tick';
 
 /**
@@ -133,9 +134,9 @@ function registerPtyHandlers(deps: IpcHandlerDependencies): void {
   // Create a new PTY terminal
   ipcMain.handle('pty:create', async (_event, { cwd, cols, rows }: { cwd?: string; cols?: number; rows?: number }) => {
     const id = uuidv4();
-    const shell = process.env.SHELL || '/bin/zsh';
+    const shell = getShell();
 
-    const ptyProcess = pty.spawn(shell, ['-l'], {
+    const ptyProcess = pty.spawn(shell, getShellArgs(), {
       name: 'xterm-256color',
       cols: cols || 80,
       rows: rows || 24,
@@ -1031,7 +1032,7 @@ function registerPluginHandlers(deps: IpcHandlerDependencies): void {
   // contain broken completions like compdef from other tools)
   ipcMain.handle('plugin:install-start', async (_event, { command, cols, rows }: { command: string; cols?: number; rows?: number }) => {
     const id = uuidv4();
-    const shell = process.env.SHELL || '/bin/zsh';
+    const shell = getShell();
 
     // If the command starts with /, it's a Claude CLI slash command - prefix with 'claude'
     const finalCommand = command.startsWith('/') ? `claude "${command}"` : command;
@@ -1845,32 +1846,47 @@ function registerShellHandlers(deps: IpcHandlerDependencies): void {
 
   // Open in external terminal
   ipcMain.handle('shell:open-terminal', async (_event, { cwd, command }: { cwd: string; command?: string }) => {
-    const shell = process.env.SHELL || '/bin/zsh';
-    const escapedCwd = cwd.replace(/'/g, "'\\''");
-    const script = command
-      ? `tell application "Terminal" to do script "cd '${escapedCwd}' && ${command}"`
-      : `tell application "Terminal" to do script "cd '${escapedCwd}'"`;
+    const shell = getShell();
 
-    const ptyProcess = pty.spawn(shell, ['-c', `osascript -e '${script.replace(/'/g, "'\\''")}'`], {
-      name: 'xterm-256color',
-      cols: 80,
-      rows: 24,
-      cwd: os.homedir(),
-      env: process.env as { [key: string]: string },
-    });
+    if (process.platform === 'darwin') {
+      const escapedCwd = cwd.replace(/'/g, "'\\''");
+      const script = command
+        ? `tell application "Terminal" to do script "cd '${escapedCwd}' && ${command}"`
+        : `tell application "Terminal" to do script "cd '${escapedCwd}'"`;
 
-    return new Promise((resolve) => {
-      ptyProcess.onExit(() => {
-        resolve({ success: true });
+      const ptyProcess = pty.spawn(shell, ['-c', `osascript -e '${script.replace(/'/g, "'\\''")}'`], {
+        name: 'xterm-256color',
+        cols: 80,
+        rows: 24,
+        cwd: os.homedir(),
+        env: process.env as { [key: string]: string },
       });
-    });
+
+      return new Promise((resolve) => {
+        ptyProcess.onExit(() => {
+          resolve({ success: true });
+        });
+      });
+    } else if (process.platform === 'win32') {
+      // On Windows, open Windows Terminal or cmd in the given directory
+      const { spawn } = require('child_process') as typeof import('child_process');
+      const args = command ? ['/k', command] : [];
+      spawn('cmd.exe', args, { cwd, detached: true, stdio: 'ignore' }).unref();
+      return { success: true };
+    } else {
+      // Linux fallback: try xterm
+      const { spawn } = require('child_process') as typeof import('child_process');
+      spawn('xterm', command ? ['-e', command] : [], { cwd, detached: true, stdio: 'ignore' }).unref();
+      return { success: true };
+    }
   });
 
   // Execute arbitrary command (uses PTY)
   ipcMain.handle('shell:exec', async (_event, { command, cwd }: { command: string; cwd?: string }) => {
     return new Promise((resolve) => {
-      const shell = process.env.SHELL || '/bin/zsh';
-      const ptyProcess = pty.spawn(shell, ['-l', '-c', command], {
+      const shell = getShell();
+      const execArgs = process.platform === 'win32' ? ['/c', command] : ['-l', '-c', command];
+      const ptyProcess = pty.spawn(shell, execArgs, {
         name: 'xterm-256color',
         cols: 80,
         rows: 24,
@@ -1897,9 +1913,9 @@ function registerShellHandlers(deps: IpcHandlerDependencies): void {
   // Start a new quick terminal PTY
   ipcMain.handle('shell:startPty', async (_event, { cwd, cols, rows }: { cwd?: string; cols?: number; rows?: number }) => {
     const id = uuidv4();
-    const shell = process.env.SHELL || '/bin/zsh';
+    const shell = getShell();
 
-    const ptyProcess = pty.spawn(shell, ['-l'], {
+    const ptyProcess = pty.spawn(shell, getShellArgs(), {
       name: 'xterm-256color',
       cols: cols || 80,
       rows: rows || 24,
