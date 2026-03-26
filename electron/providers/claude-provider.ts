@@ -184,15 +184,17 @@ export class ClaudeProvider implements CLIProvider {
       settings.hooks = {};
     }
 
+    const isWin = os.platform() === 'win32';
+
     const hookFiles = [
-      { type: 'PostToolUse', file: 'post-tool-use.sh', matcher: '*' },
-      { type: 'Stop', file: 'on-stop.sh', matcher: undefined },
-      { type: 'SessionStart', file: 'session-start.sh', matcher: '*' },
-      { type: 'SessionEnd', file: 'session-end.sh', matcher: '*' },
-      { type: 'Notification', file: 'notification.sh', matcher: '*' },
-      { type: 'PermissionRequest', file: 'permission-request.sh', matcher: undefined },
-      { type: 'TaskCompleted', file: 'task-completed.sh', matcher: undefined },
-      { type: 'UserPromptSubmit', file: 'user-prompt-submit.sh', matcher: undefined },
+      { type: 'PostToolUse', file: isWin ? 'post-tool-use.ps1' : 'post-tool-use.sh', matcher: '*' },
+      { type: 'Stop', file: isWin ? 'on-stop.ps1' : 'on-stop.sh', matcher: undefined },
+      { type: 'SessionStart', file: isWin ? 'session-start.ps1' : 'session-start.sh', matcher: '*' },
+      { type: 'SessionEnd', file: isWin ? 'session-end.ps1' : 'session-end.sh', matcher: '*' },
+      { type: 'Notification', file: isWin ? 'notification.ps1' : 'notification.sh', matcher: '*' },
+      { type: 'PermissionRequest', file: isWin ? 'permission-request.ps1' : 'permission-request.sh', matcher: undefined },
+      { type: 'TaskCompleted', file: isWin ? 'task-completed.ps1' : 'task-completed.sh', matcher: undefined },
+      { type: 'UserPromptSubmit', file: isWin ? 'user-prompt-submit.ps1' : 'user-prompt-submit.sh', matcher: undefined },
     ];
 
     let updated = false;
@@ -216,8 +218,11 @@ export class ClaudeProvider implements CLIProvider {
           updated = true;
         }
       } else {
+        const command = isWin
+          ? `powershell.exe -ExecutionPolicy Bypass -File "${commandPath.replace(/\\/g, '/')}"`
+          : commandPath;
         const hookConfig: { matcher?: string; hooks: Array<{ type: string; command: string; timeout: number }> } = {
-          hooks: [{ type: 'command', command: commandPath, timeout: 30 }]
+          hooks: [{ type: 'command', command, timeout: 30 }]
         };
         if (matcher) hookConfig.matcher = matcher;
         settings.hooks![type] = [...existing, hookConfig];
