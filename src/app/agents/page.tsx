@@ -30,6 +30,7 @@ export default function AgentsPage() {
     startAgent,
     stopAgent,
     removeAgent,
+    sendInput,
   } = useElectronAgents();
   const { projects, openFolderDialog } = useElectronFS();
   const { installedSkills, refresh: refreshSkills } = useElectronSkills();
@@ -126,8 +127,14 @@ export default function AgentsPage() {
   }, [updateAgent]);
 
   const handleStartAgent = useCallback(async (agentId: string, prompt?: string) => {
-    await startAgent(agentId, prompt || '');
-  }, [startAgent]);
+    const agent = agents.find(a => a.id === agentId);
+    if (agent?.status === 'running' && prompt) {
+      // Claude is already running interactively — type the text directly into its stdin
+      await sendInput(agentId, prompt + '\r');
+    } else {
+      await startAgent(agentId, prompt || '');
+    }
+  }, [agents, startAgent, sendInput]);
 
   const handleRemoveAgent = useCallback((agentId: string) => {
     removeAgent(agentId);
