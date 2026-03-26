@@ -38,9 +38,9 @@ function restore() {
   rename(iconBackup, iconFile);
 }
 
-function run(cmd, env = {}) {
+function run(cmd, { cwd: runCwd = root, env: extraEnv = {} } = {}) {
   console.log(`\n> ${cmd}\n`);
-  execSync(cmd, { stdio: 'inherit', cwd: root, env: { ...process.env, ...env } });
+  execSync(cmd, { stdio: 'inherit', cwd: runCwd, env: { ...process.env, ...extraEnv } });
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
@@ -50,7 +50,7 @@ try {
   rename(iconFile, iconBackup);
 
   // 2. Build Next.js static export
-  run('npx next build', { ELECTRON_BUILD: '1' });
+  run('npx next build', { env: { ELECTRON_BUILD: '1' } });
 
   // 3. Compile Electron TypeScript
   run('npx tsc -p electron/tsconfig.json');
