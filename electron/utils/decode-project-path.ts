@@ -15,8 +15,16 @@ import * as fs from 'fs';
  */
 export function decodeProjectPath(dirName: string): string {
   const tokens = dirName.replace(/^-/, '').split('-');
-  let resolved = '/';
   let i = 0;
+
+  // Windows: if first token is a single drive letter (e.g. 'C'), use it as root
+  let resolved: string;
+  if (path.sep === '\\' && tokens.length > 0 && /^[A-Za-z]$/.test(tokens[0])) {
+    resolved = `${tokens[0].toUpperCase()}:\\`;
+    i = 1;
+  } else {
+    resolved = '/';
+  }
 
   while (i < tokens.length) {
     let matched = false;
