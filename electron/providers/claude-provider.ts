@@ -95,7 +95,11 @@ export class ClaudeProvider implements CLIProvider {
     }
 
     if (finalPrompt) {
-      command += ` '${q(finalPrompt)}'`;
+      // On Windows/PowerShell, literal newlines in single-quoted strings break
+      // interactive PTY execution (each \n triggers line evaluation).
+      // Replace newlines with spaces — content is preserved, formatting lost.
+      const shellPrompt = isWin ? finalPrompt.replace(/\r?\n/g, ' ') : finalPrompt;
+      command += ` '${q(shellPrompt)}'`;
     }
 
     return command;
