@@ -223,7 +223,7 @@ function registerAgentHandlers(deps: IpcHandlerDependencies): void {
     obsidianVaultPaths?: string[];
   }) => {
     const id = uuidv4();
-    const shell = '/bin/bash';
+    const shell = getShell();
 
     // Validate project path exists
     let cwd = config.projectPath;
@@ -313,7 +313,7 @@ function registerAgentHandlers(deps: IpcHandlerDependencies): void {
 
     let ptyProcess: pty.IPty;
     try {
-      ptyProcess = pty.spawn(shell, ['-l'], {
+      ptyProcess = pty.spawn(shell, getShellArgs(), {
         name: 'xterm-256color',
         cols: 120,
         rows: 30,
