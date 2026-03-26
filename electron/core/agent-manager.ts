@@ -230,7 +230,8 @@ export async function initAgentPty(
   handleStatusChangeNotificationCallback: (agent: AgentStatus, newStatus: string) => void,
   saveAgentsCallback: () => void
 ): Promise<string> {
-  const shell = getShell();
+  const shell = os.platform() === 'win32' ? 'powershell.exe' : getShell();
+  const shellArgs = os.platform() === 'win32' ? [] : getShellArgs();
   let cwd = agent.worktreePath || agent.projectPath;
 
   if (!fs.existsSync(cwd)) {
@@ -291,7 +292,7 @@ export async function initAgentPty(
   const agentProvider = getProvider(agent.provider);
   const providerEnvVars = agentProvider.getPtyEnvVars(agent.id, agent.projectPath, agent.skills);
 
-  const ptyProcess = pty.spawn(shell, getShellArgs(), {
+  const ptyProcess = pty.spawn(shell, shellArgs, {
     name: 'xterm-256color',
     cols: 120,
     rows: 30,

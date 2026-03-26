@@ -491,7 +491,7 @@ function registerAgentHandlers(deps: IpcHandlerDependencies): void {
       // Local provider uses Claude provider env vars + Tasmania env vars
       const localProviderEnvVars = getProvider('claude').getPtyEnvVars(agent.id, agent.projectPath, agent.skills);
 
-      const newPty = pty.spawn('/bin/bash', ['-l'], {
+      const newPty = pty.spawn(os.platform() === 'win32' ? 'powershell.exe' : '/bin/bash', os.platform() === 'win32' ? [] : ['-l'], {
         name: 'xterm-256color',
         cols: 120,
         rows: 30,
