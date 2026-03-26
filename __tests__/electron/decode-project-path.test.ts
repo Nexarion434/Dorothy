@@ -154,4 +154,21 @@ describe('decodeProjectPath', () => {
         .toBe(p('Users', 'charlie', 'Documents', 'octav-admin-frontend-v2'));
     });
   });
+
+  // Windows-only: drive letter paths (e.g. C:\Users\nicol\...)
+  if (path.sep === '\\') {
+    describe('Windows drive letter paths', () => {
+      it('decodes C: drive path correctly', () => {
+        const fullPath = 'C:\\Users\\nicol\\Documents\\Claude\\Project\\N8n';
+        existsSyncMock.mockImplementation((p: fs.PathLike) => {
+          const s = String(p);
+          return ['C:\\', 'C:\\Users', 'C:\\Users\\nicol', 'C:\\Users\\nicol\\Documents',
+            'C:\\Users\\nicol\\Documents\\Claude', 'C:\\Users\\nicol\\Documents\\Claude\\Project',
+            'C:\\Users\\nicol\\Documents\\Claude\\Project\\N8n'].includes(s);
+        });
+        expect(decodeProjectPath('-C-Users-nicol-Documents-Claude-Project-N8n'))
+          .toBe(fullPath);
+      });
+    });
+  }
 });

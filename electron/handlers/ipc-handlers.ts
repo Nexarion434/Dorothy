@@ -223,7 +223,7 @@ function registerAgentHandlers(deps: IpcHandlerDependencies): void {
     obsidianVaultPaths?: string[];
   }) => {
     const id = uuidv4();
-    const shell = '/bin/bash';
+    const shell = getShell();
 
     // Validate project path exists
     let cwd = config.projectPath;
@@ -313,7 +313,10 @@ function registerAgentHandlers(deps: IpcHandlerDependencies): void {
 
     let ptyProcess: pty.IPty;
     try {
-      ptyProcess = pty.spawn(shell, ['-l'], {
+      // Use PowerShell on Windows — cmd.exe doesn't support the single-quote syntax used in commands
+      const agentShell = os.platform() === 'win32' ? 'powershell.exe' : shell;
+      const agentShellArgs = os.platform() === 'win32' ? [] : getShellArgs();
+      ptyProcess = pty.spawn(agentShell, agentShellArgs, {
         name: 'xterm-256color',
         cols: 120,
         rows: 30,
@@ -488,7 +491,7 @@ function registerAgentHandlers(deps: IpcHandlerDependencies): void {
       // Local provider uses Claude provider env vars + Tasmania env vars
       const localProviderEnvVars = getProvider('claude').getPtyEnvVars(agent.id, agent.projectPath, agent.skills);
 
-      const newPty = pty.spawn('/bin/bash', ['-l'], {
+      const newPty = pty.spawn(os.platform() === 'win32' ? 'powershell.exe' : '/bin/bash', os.platform() === 'win32' ? [] : ['-l'], {
         name: 'xterm-256color',
         cols: 120,
         rows: 30,
@@ -618,8 +621,15 @@ function registerAgentHandlers(deps: IpcHandlerDependencies): void {
     scheduleTick();
 
     // First cd to the appropriate directory (worktree if exists, otherwise project), then run claude
-    const workingPath = (agent.worktreePath || agent.projectPath).replace(/'/g, "'\\''");
-    const fullCommand = `cd '${workingPath}' && ${command}`;
+    let fullCommand: string;
+    if (os.platform() === 'win32') {
+      // PowerShell syntax: Set-Location then invoke with & call operator
+      const workingPath = (agent.worktreePath || agent.projectPath).replace(/'/g, "''");
+      fullCommand = `Set-Location '${workingPath}'; ${command}`;
+    } else {
+      const workingPath = (agent.worktreePath || agent.projectPath).replace(/'/g, "'\\''");
+      fullCommand = `cd '${workingPath}' && ${command}`;
+    }
 
     // Wait for the shell to initialize before writing the command.
     // A freshly-spawned PTY needs time for bash to start up (~200ms).
@@ -852,7 +862,8 @@ function registerSkillHandlers(deps: IpcHandlerDependencies): void {
     }
 
     const fullPath = buildFullPath();
-    const ptyProcess = pty.spawn('npx', npxArgs, {
+    const npxBin = os.platform() === 'win32' ? 'npx.cmd' : 'npx';
+    const ptyProcess = pty.spawn(npxBin, npxArgs, {
       name: 'xterm-256color',
       cols: cols || 80,
       rows: rows || 24,
