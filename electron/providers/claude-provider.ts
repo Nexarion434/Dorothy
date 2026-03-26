@@ -1,6 +1,7 @@
 import * as os from 'os';
 import * as path from 'path';
 import * as fs from 'fs';
+import { getDorothyDir } from '../utils/platform-paths';
 import { execSync } from 'child_process';
 import type { AppSettings } from '../types';
 import type {
@@ -34,16 +35,21 @@ export class ClaudeProvider implements CLIProvider {
   }
 
   buildInteractiveCommand(params: InteractiveCommandParams): string {
-    let command = `'${params.binaryPath.replace(/'/g, "'\\''")}'`;
+    const isWin = os.platform() === 'win32';
+    // Escape single quotes for the target shell
+    const q = (s: string) => isWin ? s.replace(/'/g, "''") : s.replace(/'/g, "'\\''");
+
+    // On PowerShell (Windows), use & call operator; on bash, just quote the path
+    let command = isWin ? `& '${q(params.binaryPath)}'` : `'${q(params.binaryPath)}'`;
 
     // MCP config
     if (params.mcpConfigPath && fs.existsSync(params.mcpConfigPath)) {
-      command += ` --mcp-config '${params.mcpConfigPath.replace(/'/g, "'\\''")}'`;
+      command += ` --mcp-config '${q(params.mcpConfigPath)}'`;
     }
 
     // System prompt file (Super Agent instructions)
     if (params.systemPromptFile && fs.existsSync(params.systemPromptFile)) {
-      command += ` --append-system-prompt-file '${params.systemPromptFile.replace(/'/g, "'\\''")}'`;
+      command += ` --append-system-prompt-file '${q(params.systemPromptFile)}'`;
     }
 
     // Model
@@ -71,22 +77,20 @@ export class ClaudeProvider implements CLIProvider {
 
     // Secondary project
     if (params.secondaryProjectPath) {
-      const escaped = params.secondaryProjectPath.replace(/'/g, "'\\''");
-      command += ` --add-dir '${escaped}'`;
+      command += ` --add-dir '${q(params.secondaryProjectPath)}'`;
     }
 
     // Obsidian vaults (read-only access)
     if (params.obsidianVaultPaths) {
       for (const vp of params.obsidianVaultPaths) {
         if (fs.existsSync(vp)) {
-          const escaped = vp.replace(/'/g, "'\\''");
-          command += ` --add-dir '${escaped}'`;
+          command += ` --add-dir '${q(vp)}'`;
         }
       }
     }
 
-    // Dorothy's CLAUDE.md via ~/.dorothy
-    command += ` --add-dir '${os.homedir()}/.dorothy'`;
+    // Dorothy's data dir (contains CLAUDE.md and agent config)
+    command += ` --add-dir '${q(getDorothyDir())}'`;
 
     // Prompt with skills directive
     let finalPrompt = params.prompt;
@@ -96,8 +100,11 @@ export class ClaudeProvider implements CLIProvider {
     }
 
     if (finalPrompt) {
-      const escaped = finalPrompt.replace(/'/g, "'\\''");
-      command += ` '${escaped}'`;
+      // On Windows/PowerShell, literal newlines in single-quoted strings break
+      // interactive PTY execution (each \n triggers line evaluation).
+      // Replace newlines with spaces — content is preserved, formatting lost.
+      const shellPrompt = isWin ? finalPrompt.replace(/\r?\n/g, ' ') : finalPrompt;
+      command += ` '${q(shellPrompt)}'`;
     }
 
     return command;
@@ -189,15 +196,17 @@ export class ClaudeProvider implements CLIProvider {
       settings.hooks = {};
     }
 
+    const isWin = os.platform() === 'win32';
+
     const hookFiles = [
-      { type: 'PostToolUse', file: 'post-tool-use.sh', matcher: '*' },
-      { type: 'Stop', file: 'on-stop.sh', matcher: undefined },
-      { type: 'SessionStart', file: 'session-start.sh', matcher: '*' },
-      { type: 'SessionEnd', file: 'session-end.sh', matcher: '*' },
-      { type: 'Notification', file: 'notification.sh', matcher: '*' },
-      { type: 'PermissionRequest', file: 'permission-request.sh', matcher: undefined },
-      { type: 'TaskCompleted', file: 'task-completed.sh', matcher: undefined },
-      { type: 'UserPromptSubmit', file: 'user-prompt-submit.sh', matcher: undefined },
+      { type: 'PostToolUse', file: isWin ? 'post-tool-use.ps1' : 'post-tool-use.sh', matcher: '*' },
+      { type: 'Stop', file: isWin ? 'on-stop.ps1' : 'on-stop.sh', matcher: undefined },
+      { type: 'SessionStart', file: isWin ? 'session-start.ps1' : 'session-start.sh', matcher: '*' },
+      { type: 'SessionEnd', file: isWin ? 'session-end.ps1' : 'session-end.sh', matcher: '*' },
+      { type: 'Notification', file: isWin ? 'notification.ps1' : 'notification.sh', matcher: '*' },
+      { type: 'PermissionRequest', file: isWin ? 'permission-request.ps1' : 'permission-request.sh', matcher: undefined },
+      { type: 'TaskCompleted', file: isWin ? 'task-completed.ps1' : 'task-completed.sh', matcher: undefined },
+      { type: 'UserPromptSubmit', file: isWin ? 'user-prompt-submit.ps1' : 'user-prompt-submit.sh', matcher: undefined },
     ];
 
     let updated = false;
@@ -208,26 +217,24 @@ export class ClaudeProvider implements CLIProvider {
       const commandPath = path.join(hooksDir, file);
       if (!fs.existsSync(commandPath)) continue;
 
-      const existing: HookEntry[] = settings.hooks![type] || [];
-      const entryIndex = existing.findIndex((h: HookEntry) =>
-        h.hooks?.some((hh: { command?: string }) => hh.command?.includes(file))
+      // Match by stem (without extension) so old .sh entries are replaced by .ps1 on Windows
+      const stem = file.replace(/\.(sh|ps1)$/, '');
+      let existing: HookEntry[] = settings.hooks![type] || [];
+
+      // Remove any stale Dorothy hook entries for this stem (e.g. old .sh when switching to .ps1)
+      existing = existing.filter((h: HookEntry) =>
+        !h.hooks?.some((hh: { command?: string }) => hh.command && hh.command.includes(stem))
       );
 
-      if (entryIndex >= 0) {
-        const entry: HookEntry = existing[entryIndex];
-        const hookIndex = entry.hooks.findIndex((hh: { command?: string }) => hh.command?.includes(file));
-        if (hookIndex >= 0 && entry.hooks[hookIndex].command !== commandPath) {
-          entry.hooks[hookIndex].command = commandPath;
-          updated = true;
-        }
-      } else {
-        const hookConfig: { matcher?: string; hooks: Array<{ type: string; command: string; timeout: number }> } = {
-          hooks: [{ type: 'command', command: commandPath, timeout: 30 }]
-        };
-        if (matcher) hookConfig.matcher = matcher;
-        settings.hooks![type] = [...existing, hookConfig];
-        updated = true;
-      }
+      const hookCmd = isWin
+        ? `powershell.exe -ExecutionPolicy Bypass -File "${commandPath.replace(/\\/g, '/')}"`
+        : commandPath;
+      const hookConfig: { matcher?: string; hooks: Array<{ type: string; command: string; timeout: number }> } = {
+        hooks: [{ type: 'command', command: hookCmd, timeout: 30 }]
+      };
+      if (matcher) hookConfig.matcher = matcher;
+      settings.hooks![type] = [...existing, hookConfig];
+      updated = true;
     }
 
     if (updated) {

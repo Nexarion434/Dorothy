@@ -5,6 +5,7 @@ on:
     branches:
       - feat/windows-support
       - main
+      - claude/clone-github-repo-rvM1A
   pull_request:
     branches:
       - main
@@ -32,8 +33,11 @@ jobs:
       - name: Run tests
         run: npm test
 
-      - name: Pack Windows (no installer, for validation)
-        run: npm run electron:pack:win
+      - name: Generate icon.ico from PNG
+        run: magick public/icon-512.png -define icon:auto-resize=256,128,64,48,32,16 public/icon.ico
+
+      - name: Build Windows installer (NSIS)
+        run: npm run electron:build:win
         env:
           ELECTRON_BUILD: '1'
 
@@ -42,6 +46,6 @@ jobs:
         if: success()
         with:
           name: dorothy-windows
-          path: release/**/*.exe
-          if-no-files-found: ignore
+          path: release/*.exe
+          if-no-files-found: warn
           retention-days: 7
