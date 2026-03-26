@@ -862,7 +862,8 @@ function registerSkillHandlers(deps: IpcHandlerDependencies): void {
     }
 
     const fullPath = buildFullPath();
-    const ptyProcess = pty.spawn('npx', npxArgs, {
+    const npxBin = os.platform() === 'win32' ? 'npx.cmd' : 'npx';
+    const ptyProcess = pty.spawn(npxBin, npxArgs, {
       name: 'xterm-256color',
       cols: cols || 80,
       rows: rows || 24,
