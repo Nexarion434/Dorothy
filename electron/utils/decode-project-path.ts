@@ -78,22 +78,24 @@ export function decodeProjectPath(dirName: string): string {
 function separatorCombinations(tokens: string[]): string[] {
   if (tokens.length <= 1) return [tokens[0] || ''];
 
-  const separators = ['-', '.'];
+  // Try space first (most common in Windows paths), then dash, then dot
+  const separators = [' ', '-', '.'];
   const positions = tokens.length - 1;
 
-  // Safety cap — for very long token sequences just try all-dash and all-dot
-  if (positions > 6) {
-    return [tokens.join('-'), tokens.join('.')];
+  // Safety cap — for very long token sequences try the most common variants
+  if (positions > 5) {
+    return [tokens.join(' '), tokens.join('-'), tokens.join('.')];
   }
 
-  const total = 1 << positions; // 2^positions
+  const total = Math.pow(3, positions);
   const results: string[] = [];
 
   for (let mask = 0; mask < total; mask++) {
     let result = tokens[0];
+    let m = mask;
     for (let j = 0; j < positions; j++) {
-      const sepIdx = (mask >> j) & 1;
-      result += separators[sepIdx] + tokens[j + 1];
+      result += separators[m % 3] + tokens[j + 1];
+      m = Math.floor(m / 3);
     }
     results.push(result);
   }
