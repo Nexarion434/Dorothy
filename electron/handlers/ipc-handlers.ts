@@ -313,7 +313,10 @@ function registerAgentHandlers(deps: IpcHandlerDependencies): void {
 
     let ptyProcess: pty.IPty;
     try {
-      ptyProcess = pty.spawn(shell, getShellArgs(), {
+      // Use PowerShell on Windows — cmd.exe doesn't support the single-quote syntax used in commands
+      const agentShell = os.platform() === 'win32' ? 'powershell.exe' : shell;
+      const agentShellArgs = os.platform() === 'win32' ? [] : getShellArgs();
+      ptyProcess = pty.spawn(agentShell, agentShellArgs, {
         name: 'xterm-256color',
         cols: 120,
         rows: 30,
@@ -618,8 +621,15 @@ function registerAgentHandlers(deps: IpcHandlerDependencies): void {
     scheduleTick();
 
     // First cd to the appropriate directory (worktree if exists, otherwise project), then run claude
-    const workingPath = (agent.worktreePath || agent.projectPath).replace(/'/g, "'\\''");
-    const fullCommand = `cd '${workingPath}' && ${command}`;
+    let fullCommand: string;
+    if (os.platform() === 'win32') {
+      // PowerShell syntax: Set-Location then invoke with & call operator
+      const workingPath = (agent.worktreePath || agent.projectPath).replace(/'/g, "''");
+      fullCommand = `Set-Location '${workingPath}'; ${command}`;
+    } else {
+      const workingPath = (agent.worktreePath || agent.projectPath).replace(/'/g, "'\\''");
+      fullCommand = `cd '${workingPath}' && ${command}`;
+    }
 
     // Wait for the shell to initialize before writing the command.
     // A freshly-spawned PTY needs time for bash to start up (~200ms).
