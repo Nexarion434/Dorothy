@@ -101,10 +101,9 @@ export default function AgentsPage() {
   ) => {
     try {
       const agent = await createAgent({ projectPath, skills, worktree, character, name, secondaryProjectPath, skipPermissions, provider, localModel, obsidianVaultPaths });
-      if (prompt) {
-        const options = { model: provider === 'local' ? undefined : model, provider, localModel };
-        await startAgent(agent.id, prompt, options);
-      }
+      // Always launch Claude immediately (interactive mode if no prompt, with task if prompt given)
+      const options = { model: provider === 'local' ? undefined : model, provider, localModel };
+      await startAgent(agent.id, prompt || '', options);
       setShowNewChatModal(false);
     } catch (error) {
       console.error('Failed to create agent:', error);
