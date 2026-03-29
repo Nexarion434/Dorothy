@@ -7,6 +7,22 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    id: 11,
+    version: '1.2.8',
+    date: '2026-03-29',
+    updates: [
+      'Agent permission modes: Normal, Auto, and Bypass replace old toggle',
+      'Agent effort level setting (Low, Medium, High)',
+      'Major Usage page overhaul — model breakdown donut chart, top projects, weekly trends',
+      'Multiline input support — Shift+Enter inserts newline, auto-resizing textarea',
+      'Broadcast mode — send input to all terminals at once',
+      'Terminal fixes: preserve content on navigation, fix fullscreen buttons, scroll-to-bottom on replay',
+      'Persist all agent settings (model, prompt, worktree) across restarts',
+      'Start All button now works on previously-started agents',
+      'Sidebar and Kanban UI polish',
+    ],
+  },
+  {
     id: 10,
     version: '1.2.7',
     date: '2026-03-28',
