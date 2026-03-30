@@ -7,7 +7,6 @@ import {
   Sparkles,
   Monitor,
   Terminal,
-  Twitter,
   Cloud,
   Cpu,
   Plug,
@@ -16,6 +15,7 @@ import { SlackIcon } from './SlackIcon';
 import { JiraIcon } from './JiraIcon';
 import { TasmaniaIcon } from './TasmaniaIcon';
 import { ObsidianIcon } from './ObsidianIcon';
+import { XTwitterIcon } from './XTwitterIcon';
 import type { SettingsSection } from './types';
 
 export const SECTIONS: { id: SettingsSection; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
@@ -27,7 +27,7 @@ export const SECTIONS: { id: SettingsSection; label: string; icon: React.Compone
   { id: 'telegram', label: 'Telegram', icon: Send },
   { id: 'slack', label: 'Slack', icon: SlackIcon },
   { id: 'jira', label: 'JIRA', icon: JiraIcon },
-  { id: 'socialdata', label: 'X (Twitter)', icon: Twitter },
+  { id: 'socialdata', label: 'X (Twitter)', icon: XTwitterIcon },
   { id: 'tasmania', label: 'Tasmania', icon: TasmaniaIcon },
   { id: 'opencode', label: 'OpenCode', icon: Cpu },
   { id: 'pi', label: 'Pi Terminal', icon: Cpu },

@@ -1,7 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { Eye, EyeOff, Loader2, Twitter, CheckCircle, XCircle, Send } from 'lucide-react';
+import { Eye, EyeOff, Loader2, CheckCircle, XCircle, Send } from 'lucide-react';
+import { XTwitterIcon } from './XTwitterIcon';
 import { Toggle } from './Toggle';
 import type { AppSettings } from './types';
 
@@ -118,7 +119,7 @@ export const SocialDataSection = ({ appSettings, onSaveAppSettings, onUpdateLoca
       <div className="border border-border bg-card p-6">
         <div className="flex items-center justify-between pb-4 border-b border-border">
           <div className="flex items-center gap-3">
-            <Twitter className="w-5 h-5 text-muted-foreground" />
+            <XTwitterIcon className="w-5 h-5 text-muted-foreground" />
             <div>
               <p className="font-medium">Read — SocialData API</p>
               <p className="text-sm text-muted-foreground">
@@ -171,7 +172,7 @@ export const SocialDataSection = ({ appSettings, onSaveAppSettings, onUpdateLoca
               {testing ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
               ) : (
-                <Twitter className="w-4 h-4" />
+                <XTwitterIcon className="w-4 h-4" />
               )}
               Test Connection
             </button>

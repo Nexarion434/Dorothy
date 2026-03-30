@@ -82,8 +82,7 @@ export default function AppSidebar() {
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton size="lg" asChild>
-              <Link href="/">
+            <SidebarMenuButton size="lg" render={<Link href="/" />}>
                 <div className="flex aspect-square size-8 items-center justify-center rounded-lg overflow-hidden">
                   <img src="/dorothy-without-text.png" alt="Dorothy" className="w-full h-full object-cover scale-150" />
                 </div>
@@ -91,7 +90,6 @@ export default function AppSidebar() {
                   <span className="truncate font-semibold">Dorothy</span>
                   <span className="truncate text-xs text-muted-foreground">Agent Manager</span>
                 </div>
-              </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
@@ -108,11 +106,9 @@ export default function AppSidebar() {
                   : pathname === item.href || pathname.startsWith(`${item.href}/`);
                 return (
                   <SidebarMenuItem key={item.href}>
-                    <SidebarMenuButton asChild isActive={isActive} tooltip={item.label}>
-                      <Link href={item.href}>
+                    <SidebarMenuButton render={<Link href={item.href} />} isActive={isActive} tooltip={item.label}>
                         <item.icon className="size-4" />
                         <span>{item.label}</span>
-                      </Link>
                     </SidebarMenuButton>
                     {item.href === '/vault' && vaultUnreadCount > 0 && (
                       <SidebarMenuBadge>{vaultUnreadCount}</SidebarMenuBadge>
@@ -130,8 +126,7 @@ export default function AppSidebar() {
         <SidebarMenu>
           {/* What's New */}
           <SidebarMenuItem>
-            <SidebarMenuButton asChild isActive={pathname === '/whats-new'} tooltip="What's New">
-              <Link href="/whats-new">
+            <SidebarMenuButton render={<Link href="/whats-new" />} isActive={pathname === '/whats-new'} tooltip="What's New">
                 <div className="relative">
                   <Gift className="size-4" />
                   {whatsNewHasNew && (
@@ -139,7 +134,6 @@ export default function AppSidebar() {
                   )}
                 </div>
                 <span>What&apos;s New</span>
-              </Link>
             </SidebarMenuButton>
             {whatsNewHasNew && (
               <SidebarMenuBadge className="bg-red-500 text-white">1</SidebarMenuBadge>
@@ -151,14 +145,12 @@ export default function AppSidebar() {
           {/* Settings */}
           <SidebarMenuItem>
             <SidebarMenuButton
-              asChild
+              render={<Link href="/settings" />}
               isActive={pathname === '/settings' || pathname.startsWith('/settings/')}
               tooltip="Settings"
             >
-              <Link href="/settings">
                 <Settings className="size-4" />
                 <span>Settings</span>
-              </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
 
