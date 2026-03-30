@@ -6,6 +6,7 @@ on:
       - feat/windows-support
       - main
       - claude/clone-github-repo-rvM1A
+      - feat/shadcn-sidebar
   pull_request:
     branches:
       - main
