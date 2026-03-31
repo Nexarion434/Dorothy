@@ -157,6 +157,7 @@
     "call-bind-apply-helpers": "^1.0.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "cmdk": "^1.1.1",
     "dunder-proto": "^1.0.1",
     "electron-updater": "^6.3.9",
     "framer-motion": "^12.29.0",

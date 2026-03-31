@@ -19,7 +19,7 @@ import {
   LayoutGrid,
   TerminalSquare,
 } from 'lucide-react';
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -258,25 +258,24 @@ export default function Dashboard() {
         </div>
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4">
           {/* View Mode Toggle */}
-          <ToggleGroup
-            value={[viewMode]}
-            onValueChange={(vals) => { if (vals.length > 0) setViewMode(vals[vals.length - 1] as typeof viewMode); }}
-          >
-            <ToggleGroupItem value="terminals">
-              <TerminalSquare />
-              <span className="hidden sm:inline">Terminals</span>
-              <span className="sm:hidden">Term</span>
-            </ToggleGroupItem>
-            <ToggleGroupItem value="canvas">
-              <LayoutGrid />
-              Board
-            </ToggleGroupItem>
-            <ToggleGroupItem value="world">
-              <Globe />
-              <span className="hidden sm:inline">3D View</span>
-              <span className="sm:hidden">3D</span>
-            </ToggleGroupItem>
-          </ToggleGroup>
+          <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as typeof viewMode)}>
+            <TabsList>
+              <TabsTrigger value="terminals">
+                <TerminalSquare className="size-4" />
+                <span className="hidden sm:inline">Terminals</span>
+                <span className="sm:hidden">Term</span>
+              </TabsTrigger>
+              <TabsTrigger value="canvas">
+                <LayoutGrid className="size-4" />
+                Board
+              </TabsTrigger>
+              <TabsTrigger value="world">
+                <Globe className="size-4" />
+                <span className="hidden sm:inline">3D View</span>
+                <span className="sm:hidden">3D</span>
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
 
           <div className="text-right text-xs text-muted-foreground hidden sm:block">
             <div className="flex items-center gap-2 justify-end">
