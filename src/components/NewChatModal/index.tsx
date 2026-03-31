@@ -317,7 +317,7 @@ export default function NewChatModal({
 
     const { character: agentCharacter, name: agentName } = agentPersonaRef.current;
     const projectName = projectPath.split('/').pop() || 'project';
-    const finalName = agentName.trim() || `${CHARACTER_OPTIONS.find(c => c.id === agentCharacter)?.name || 'Agent'} on ${projectName}`;
+    const finalName = agentName.trim() || CHARACTER_OPTIONS.find(c => c.id === agentCharacter)?.name || 'Agent';
     const secondaryPath = showSecondaryProject ? (selectedSecondaryProject || customSecondaryPath) : undefined;
 
     if (isEditMode && editAgent && onUpdate) {
