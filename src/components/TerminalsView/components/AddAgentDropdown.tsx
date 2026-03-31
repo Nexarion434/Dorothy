@@ -14,7 +14,6 @@ import {
   CommandList,
   CommandSeparator,
 } from '@/components/ui/command';
-import { Button } from '@/components/ui/button';
 
 interface AddAgentDropdownProps {
   allAgents: AgentStatus[];
@@ -51,12 +50,10 @@ export default function AddAgentDropdown({
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Button variant="default" size="sm" className="gap-1.5 text-xs h-7">
-          <Plus className="w-3.5 h-3.5" />
-          <span className="hidden sm:inline">Add agent to board</span>
-          <ChevronsUpDown className="w-3 h-3 opacity-50" />
-        </Button>
+      <PopoverTrigger className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground h-7 hover:bg-primary/90 transition-colors">
+        <Plus className="w-3.5 h-3.5" />
+        <span className="hidden sm:inline">Add agent to board</span>
+        <ChevronsUpDown className="w-3 h-3 opacity-50" />
       </PopoverTrigger>
       <PopoverContent className="w-[240px] p-0" align="end">
         <Command>
