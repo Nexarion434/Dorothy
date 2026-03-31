@@ -1,7 +1,7 @@
 'use client';
 
-import { motion } from 'framer-motion';
 import { LucideIcon } from 'lucide-react';
+import { Card, CardContent } from '@/components/ui/card';
 
 interface StatsCardProps {
   title: string;
@@ -15,71 +15,28 @@ interface StatsCardProps {
   };
 }
 
-const colorMap = {
-  cyan: {
-    bg: 'bg-white/5',
-    text: 'text-white',
-    border: 'hover:border-white/30',
-  },
-  green: {
-    bg: 'bg-white/5',
-    text: 'text-white',
-    border: 'hover:border-white/30',
-  },
-  amber: {
-    bg: 'bg-white/5',
-    text: 'text-white',
-    border: 'hover:border-white/30',
-  },
-  purple: {
-    bg: 'bg-white/5',
-    text: 'text-white',
-    border: 'hover:border-white/30',
-  },
-  red: {
-    bg: 'bg-white/5',
-    text: 'text-white',
-    border: 'hover:border-white/30',
-  },
-  blue: {
-    bg: 'bg-white/5',
-    text: 'text-white',
-    border: 'hover:border-white/30',
-  },
-};
-
-export default function StatsCard({ title, value, subtitle, icon: Icon, color, trend }: StatsCardProps) {
-  const colors = colorMap[color];
-
+export default function StatsCard({ title, value, subtitle, icon: Icon, trend }: StatsCardProps) {
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      className={`
-        relative overflow-hidden border border-border
-        bg-card p-6 transition-all duration-200
-        hover:border-white/30 hover:shadow-elevated
-      `}
-    >
-      <div className="flex items-start justify-between">
+    <Card>
+      <CardContent className="flex items-start justify-between pt-6">
         <div className="space-y-2">
           <p className="text-sm font-medium text-muted-foreground">{title}</p>
-          <p className="text-3xl font-bold tracking-tight text-foreground">{value}</p>
+          <p className="text-3xl font-bold tracking-tight">{value}</p>
           {subtitle && (
-            <p className="text-xs text-muted-foreground mt-1">{subtitle}</p>
+            <p className="text-xs text-muted-foreground">{subtitle}</p>
           )}
           {trend && (
-            <div className={`flex items-center gap-1 text-xs font-semibold ${trend.isPositive ? 'text-success' : 'text-danger'}`}>
+            <div className={`flex items-center gap-1 text-xs font-semibold ${trend.isPositive ? 'text-green-500' : 'text-red-500'}`}>
               <span>{trend.isPositive ? '↑' : '↓'}</span>
               <span>{Math.abs(trend.value)}%</span>
               <span className="text-muted-foreground font-normal">vs yesterday</span>
             </div>
           )}
         </div>
-        <div className={`${colors.bg} ${colors.text} p-3`}>
-          <Icon className="w-5 h-5" />
+        <div className="p-3 bg-muted rounded-md">
+          <Icon className="w-5 h-5 text-muted-foreground" />
         </div>
-      </div>
-    </motion.div>
+      </CardContent>
+    </Card>
   );
 }
