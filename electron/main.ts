@@ -303,6 +303,11 @@ function initApiServer() {
 // Register protocol schemes before app is ready
 registerProtocolSchemes();
 
+// Windows: set AppUserModelId so notifications and taskbar work correctly
+if (process.platform === 'win32') {
+  app.setAppUserModelId('io.dorothy.app');
+}
+
 app.whenReady().then(async () => {
   console.log('App ready, initializing...');
 
@@ -327,6 +332,17 @@ app.whenReady().then(async () => {
 
   // Migrate data from ~/.claude-manager if it exists (rebrand migration)
   migrateFromClaudeManager();
+
+  // On Windows, rehydrate node-cron scheduled tasks from ~/.claude/schedules.json
+  if (process.platform === 'win32') {
+    try {
+      const { rehydrateSchedules } = await import('./services/scheduler');
+      const { SCRIPT_EXT } = await import('./services/script-generator');
+      rehydrateSchedules(SCRIPT_EXT);
+    } catch (err) {
+      console.warn('[scheduler] Failed to rehydrate Windows schedules:', err);
+    }
+  }
 
   // Load agents from disk
   loadAgents();
@@ -553,14 +569,27 @@ app.whenReady().then(async () => {
       agent.currentTask = prompt.slice(0, 100);
       agent.lastActivity = new Date().toISOString();
 
-      const workingPath = (agent.worktreePath || agent.projectPath).replace(/'/g, "'\\''");
-      const fullCommand = `cd '${workingPath}' && ${command}`;
+      let fullCommand: string;
+      if (process.platform === 'win32') {
+        // On Windows, quote paths with double-quotes; cmd.exe uses /d to ignore AUTORUN
+        const workingPath = agent.worktreePath || agent.projectPath;
+        fullCommand = `cd /d "${workingPath}" && ${command}`;
+      } else {
+        const workingPath = (agent.worktreePath || agent.projectPath).replace(/'/g, "'\\''");
+        fullCommand = `cd '${workingPath}' && ${command}`;
+      }
 
       // For long commands, write to a temp script to avoid PTY line-wrapping mangling
       if (fullCommand.length > 100) {
-        const tmpScript = path.join(os.tmpdir(), `claude-agent-${agentId}.sh`);
-        fs.writeFileSync(tmpScript, `#!/bin/bash\n${fullCommand}\n`, { mode: 0o755 });
-        writeProgrammaticInput(ptyProcess, `bash '${tmpScript}'`);
+        if (process.platform === 'win32') {
+          const tmpScript = path.join(os.tmpdir(), `claude-agent-${agentId}.cmd`);
+          fs.writeFileSync(tmpScript, `@echo off\r\n${fullCommand}\r\n`, 'utf-8');
+          writeProgrammaticInput(ptyProcess, `cmd /c "${tmpScript}"`);
+        } else {
+          const tmpScript = path.join(os.tmpdir(), `claude-agent-${agentId}.sh`);
+          fs.writeFileSync(tmpScript, `#!/bin/bash\n${fullCommand}\n`, { mode: 0o755 });
+          writeProgrammaticInput(ptyProcess, `bash '${tmpScript}'`);
+        }
       } else {
         writeProgrammaticInput(ptyProcess, fullCommand);
       }

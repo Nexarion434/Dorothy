@@ -209,8 +209,13 @@ const CLAUDE_SETTINGS_PATH = path.join(os.homedir(), '.claude', 'settings.json')
 
 /**
  * Install the statusline script to ~/.dorothy/statusline.sh
+ * No-op on Windows: the script requires bash, jq, and awk which are not available.
  */
 function installScript(): void {
+  if (os.platform() === 'win32') {
+    console.log('[statusline] Skipping install on Windows (bash script not supported)');
+    return;
+  }
   const dir = path.dirname(SCRIPT_PATH);
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
@@ -253,7 +258,8 @@ function writeClaudeSettings(settings: Record<string, unknown>): void {
 }
 
 /**
- * Enable the statusline: install script + add config to Claude settings.json
+ * Enable the statusline: install script + add config to Claude settings.json.
+ * On Windows this only updates settings.json; the script install is skipped.
  */
 export function enableStatusLine(): void {
   installScript();
