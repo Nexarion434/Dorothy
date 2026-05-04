@@ -18,7 +18,7 @@ import type { AgentStatus, WorktreeConfig, AgentCharacter, AppSettings, AgentPro
 import { buildFullPath } from '../utils/path-builder';
 import { decodeProjectPath } from '../utils/decode-project-path';
 import { getProvider, getAllProviders } from '../providers';
-import { getDefaultShell, getLoginShellArgs, getPtyPlatformOptions, findCli } from '../services/cli-detector';
+import { getDefaultShell, getLoginShellArgs, getPtyPlatformOptions, findCli, cdAndRun } from '../services/cli-detector';
 import { writeProgrammaticInput } from '../core/pty-manager';
 import { extractStatusLine } from '../utils/ansi';
 import { scheduleTick } from '../utils/agents-tick';
@@ -647,12 +647,13 @@ function registerAgentHandlers(deps: IpcHandlerDependencies): void {
     });
     scheduleTick();
 
-    // First cd to the appropriate directory (worktree if exists, otherwise project), then run claude
-    const workingPath = (agent.worktreePath || agent.projectPath).replace(/'/g, "'\\''");
-    const fullCommand = `cd '${workingPath}' && ${command}`;
+    // First cd to the appropriate directory (worktree if exists, otherwise project), then run claude.
+    // cdAndRun handles platform-specific cd ('cd' on Unix, 'cd /d' on Windows) and quoting.
+    const workingPath = agent.worktreePath || agent.projectPath;
+    const fullCommand = cdAndRun(workingPath, command);
 
     // Wait for the shell to initialize before writing the command.
-    // A freshly-spawned PTY needs time for bash to start up (~200ms).
+    // A freshly-spawned PTY needs time for the shell (bash/cmd) to be ready (~200-500ms).
     // Local provider always recreates the PTY, so it always needs the delay.
     const needsDelay = ptyJustCreated || provider === 'local';
     if (needsDelay) {

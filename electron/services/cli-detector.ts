@@ -13,6 +13,27 @@ import which from 'which';
 
 const IS_WIN = os.platform() === 'win32';
 
+// ── Shell-arg quoting ──────────────────────────────────────────────────────────
+
+/**
+ * Quote a single argument for the current shell.
+ * Windows (cmd.exe): double-quotes, internal `"` escaped as `""`.
+ * Unix (bash/zsh):   single-quotes, internal `'` escaped as `'\''`.
+ */
+export function quoteArg(s: string): string {
+  if (IS_WIN) return `"${s.replace(/"/g, '""')}"`;
+  return `'${s.replace(/'/g, "'\\''")}'`;
+}
+
+/**
+ * Build a `cd <dir> && <cmd>` prefix for the current shell.
+ * Windows uses `cd /d` so a drive change is allowed.
+ */
+export function cdAndRun(dir: string, cmd: string): string {
+  if (IS_WIN) return `cd /d ${quoteArg(dir)} && ${cmd}`;
+  return `cd ${quoteArg(dir)} && ${cmd}`;
+}
+
 // ── Hook extension ─────────────────────────────────────────────────────────────
 
 /**

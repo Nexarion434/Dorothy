@@ -2,7 +2,7 @@ import * as os from 'os';
 import * as path from 'path';
 import * as fs from 'fs';
 import { generateScript, escapeBashArg, escapeCmdArg, qCmd } from '../services/script-generator';
-import { hookFileForPlatform } from '../services/cli-detector';
+import { hookFileForPlatform, quoteArg } from '../services/cli-detector';
 import { execSync } from 'child_process';
 import type { AppSettings } from '../types';
 import type {
@@ -36,16 +36,18 @@ export class ClaudeProvider implements CLIProvider {
   }
 
   buildInteractiveCommand(params: InteractiveCommandParams): string {
-    let command = `'${params.binaryPath.replace(/'/g, "'\\''")}'`;
+    // Use quoteArg() for cross-platform shell-correct quoting (single-quotes
+    // on Unix, double-quotes on Windows cmd.exe).
+    let command = quoteArg(params.binaryPath);
 
     // MCP config
     if (params.mcpConfigPath && fs.existsSync(params.mcpConfigPath)) {
-      command += ` --mcp-config '${params.mcpConfigPath.replace(/'/g, "'\\''")}'`;
+      command += ` --mcp-config ${quoteArg(params.mcpConfigPath)}`;
     }
 
     // System prompt file (Super Agent instructions)
     if (params.systemPromptFile && fs.existsSync(params.systemPromptFile)) {
-      command += ` --append-system-prompt-file '${params.systemPromptFile.replace(/'/g, "'\\''")}'`;
+      command += ` --append-system-prompt-file ${quoteArg(params.systemPromptFile)}`;
     }
 
     // Model
@@ -53,7 +55,7 @@ export class ClaudeProvider implements CLIProvider {
       if (!/^[a-zA-Z0-9._:\/\[\]-]+$/.test(params.model)) {
         throw new Error('Invalid model name');
       }
-      command += ` --model '${params.model}'`;
+      command += ` --model ${quoteArg(params.model)}`;
     }
 
     // Verbose
@@ -82,22 +84,20 @@ export class ClaudeProvider implements CLIProvider {
 
     // Secondary project
     if (params.secondaryProjectPath) {
-      const escaped = params.secondaryProjectPath.replace(/'/g, "'\\''");
-      command += ` --add-dir '${escaped}'`;
+      command += ` --add-dir ${quoteArg(params.secondaryProjectPath)}`;
     }
 
     // Obsidian vaults (read-only access)
     if (params.obsidianVaultPaths) {
       for (const vp of params.obsidianVaultPaths) {
         if (fs.existsSync(vp)) {
-          const escaped = vp.replace(/'/g, "'\\''");
-          command += ` --add-dir '${escaped}'`;
+          command += ` --add-dir ${quoteArg(vp)}`;
         }
       }
     }
 
     // Dorothy's CLAUDE.md via ~/.dorothy
-    command += ` --add-dir '${os.homedir()}/.dorothy'`;
+    command += ` --add-dir ${quoteArg(path.join(os.homedir(), '.dorothy'))}`;
 
     // Prompt with skills directive
     let finalPrompt = params.prompt;
@@ -107,8 +107,7 @@ export class ClaudeProvider implements CLIProvider {
     }
 
     if (finalPrompt) {
-      const escaped = finalPrompt.replace(/'/g, "'\\''");
-      command += ` '${escaped}'`;
+      command += ` ${quoteArg(finalPrompt)}`;
     }
 
     return command;

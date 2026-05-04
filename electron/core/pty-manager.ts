@@ -57,15 +57,20 @@ export function writeProgrammaticInput(
   data: string,
   bracketPaste = false,
 ): void {
+  // Windows cmd.exe / ConPTY expects CRLF as line terminator for programmatic
+  // input; bash/zsh accept CR alone. Always emit CRLF on win32 so the shell
+  // executes the line we just wrote.
+  const eol = process.platform === 'win32' ? '\r\n' : '\r';
+
   if (bracketPaste && (data.includes('\n') || data.length > 200)) {
     // Bracket paste mode: \x1b[200~ ... \x1b[201~ tells the terminal
     // "everything between these markers is pasted content, not typed input"
     ptyProcess.write('\x1b[200~' + data + '\x1b[201~');
-    // Delay the carriage return so the terminal finishes processing the paste
-    setTimeout(() => ptyProcess.write('\r'), 300);
+    // Delay the line terminator so the terminal finishes processing the paste
+    setTimeout(() => ptyProcess.write(eol), 300);
   } else {
     // Short single-line input or shell command: send directly
-    ptyProcess.write(data + '\r');
+    ptyProcess.write(data + eol);
   }
 }
 
