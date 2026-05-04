@@ -7,6 +7,9 @@ import { v4 as uuidv4 } from 'uuid';
 import { getMainWindow } from '../core/window-manager';
 import { getProvider } from '../providers';
 import type { AgentProvider, AgentStatus, AppSettings } from '../types';
+import { findCli } from '../services/cli-detector';
+import { generateScript, SCRIPT_EXT } from '../services/script-generator';
+import { registerCronJob, removeCronJob } from '../services/scheduler';
 
 // ============================================
 // Scheduler IPC handlers (native implementation)
@@ -241,21 +244,8 @@ async function getCLIPath(providerId: AgentProvider = 'claude'): Promise<string>
     // Ignore settings read errors
   }
 
-  // Fallback: try to detect via which
-  return new Promise((resolve) => {
-    const proc = spawn('/bin/bash', ['-l', '-c', `which ${binaryName}`], {
-      env: { ...process.env, HOME: os.homedir() }
-    });
-    let output = '';
-    proc.stdout.on('data', (data) => { output += data; });
-    proc.on('close', () => {
-      const detectedPath = output.trim() || `/usr/local/bin/${binaryName}`;
-      resolve(detectedPath);
-    });
-    proc.on('error', () => {
-      resolve(`/usr/local/bin/${binaryName}`);
-    });
-  });
+  // Fallback: cross-platform which via the 'which' npm module
+  return (await findCli(binaryName)) || binaryName;
 }
 
 // Legacy alias for backward compatibility
@@ -323,7 +313,7 @@ async function createLaunchdJob(
   }
 
   // Create script to run
-  const scriptPath = path.join(os.homedir(), '.dorothy', 'scripts', `${taskId}.sh`);
+  const scriptPath = path.join(os.homedir(), '.dorothy', 'scripts', `${taskId}${SCRIPT_EXT}`);
   const scriptsDir = path.dirname(scriptPath);
   if (!fs.existsSync(scriptsDir)) {
     fs.mkdirSync(scriptsDir, { recursive: true });
@@ -348,8 +338,8 @@ async function createLaunchdJob(
     homeDir,
   });
 
-  fs.writeFileSync(scriptPath, scriptContent);
-  fs.chmodSync(scriptPath, '755');
+  fs.writeFileSync(scriptPath, scriptContent, 'utf-8');
+  if (os.platform() !== 'win32') fs.chmodSync(scriptPath, '755');
 
   // Build StartCalendarInterval — supports comma-separated values ("1,7,13") and step expressions ("*/3")
   const expandField = (field: string, max: number): (number | undefined)[] => {
@@ -439,7 +429,7 @@ async function createCronJob(
   const claudePath = await getCLIPath(provider);
   const claudeDir = path.dirname(claudePath);
 
-  const scriptPath = path.join(os.homedir(), '.dorothy', 'scripts', `${taskId}.sh`);
+  const scriptPath = path.join(os.homedir(), '.dorothy', 'scripts', `${taskId}${SCRIPT_EXT}`);
   const scriptsDir = path.dirname(scriptPath);
   if (!fs.existsSync(scriptsDir)) {
     fs.mkdirSync(scriptsDir, { recursive: true });
@@ -470,8 +460,8 @@ async function createCronJob(
     homeDir,
   });
 
-  fs.writeFileSync(scriptPath, scriptContent);
-  fs.chmodSync(scriptPath, '755');
+  fs.writeFileSync(scriptPath, scriptContent, 'utf-8');
+  if (os.platform() !== 'win32') fs.chmodSync(scriptPath, '755');
 
   const cronLine = `${schedule} ${scriptPath} # dorothy-${taskId}`;
 
@@ -501,6 +491,45 @@ async function createCronJob(
       setCron.on('error', reject);
     });
   });
+}
+
+// Create a Windows scheduled job using node-cron + a .cmd script
+async function createWindowsJob(
+  taskId: string,
+  schedule: string,
+  projectPath: string,
+  prompt: string,
+  autonomous: boolean,
+  provider: AgentProvider = 'claude'
+): Promise<void> {
+  const cliPath = await getCLIPath(provider);
+  const cliDir = path.dirname(cliPath);
+
+  const scriptPath = path.join(os.homedir(), '.dorothy', 'scripts', `${taskId}${SCRIPT_EXT}`);
+  const scriptsDir = path.dirname(scriptPath);
+  if (!fs.existsSync(scriptsDir)) fs.mkdirSync(scriptsDir, { recursive: true });
+
+  const logPath = path.join(os.homedir(), '.claude', 'logs', `${taskId}.log`);
+  const logsDir = path.dirname(logPath);
+  if (!fs.existsSync(logsDir)) fs.mkdirSync(logsDir, { recursive: true });
+
+  const statusInstruction = `\n\n[IMPORTANT] Use the update_scheduled_task_status MCP tool to report your progress:\n1. At the START of your work, call it with task_id="${taskId}" and status="running"\n2. When FINISHED successfully, call it with status="success" and a brief summary\n3. If ERRORS occurred, use status="error" (total failure) or "partial" (some parts succeeded)`;
+  const mcpConfigPath = path.join(os.homedir(), '.claude', 'mcp.json');
+
+  const scriptContent = generateScript({
+    binaryPath: cliPath,
+    binaryDir: cliDir,
+    projectPath,
+    prompt: prompt + statusInstruction,
+    autonomous,
+    mcpConfigPath,
+    logPath,
+    homeDir: os.homedir(),
+    taskId,
+  });
+
+  fs.writeFileSync(scriptPath, scriptContent, 'utf-8');
+  registerCronJob(taskId, schedule, scriptPath);
 }
 
 /**
@@ -872,7 +901,9 @@ export function registerSchedulerHandlers(deps: SchedulerDeps): void {
       saveSchedulerMetadata(metadata);
 
       // Create platform-specific job
-      if (os.platform() === 'darwin') {
+      if (os.platform() === 'win32') {
+        await createWindowsJob(taskId, schedule, config.projectPath, config.prompt, autonomous, taskProvider);
+      } else if (os.platform() === 'darwin') {
         await createLaunchdJob(taskId, schedule, config.projectPath, config.prompt, autonomous, taskProvider);
       } else {
         await createCronJob(taskId, schedule, config.projectPath, config.prompt, autonomous, taskProvider);
@@ -952,7 +983,7 @@ export function registerSchedulerHandlers(deps: SchedulerDeps): void {
       }
 
       // Remove script file
-      const scriptPath = path.join(os.homedir(), '.dorothy', 'scripts', `${taskId}.sh`);
+      const scriptPath = path.join(os.homedir(), '.dorothy', 'scripts', `${taskId}${SCRIPT_EXT}`);
       if (fs.existsSync(scriptPath)) {
         fs.unlinkSync(scriptPath);
       }
@@ -1033,26 +1064,27 @@ export function registerSchedulerHandlers(deps: SchedulerDeps): void {
       const promptWithStatus = prompt + statusInstruction;
       const escapedPrompt = promptWithStatus.replace(/'/g, "'\\''");
 
-      const scriptPath = path.join(os.homedir(), '.dorothy', 'scripts', `${taskId}.sh`);
+      const scriptPath = path.join(os.homedir(), '.dorothy', 'scripts', `${taskId}${SCRIPT_EXT}`);
       const scriptsDir = path.dirname(scriptPath);
       if (!fs.existsSync(scriptsDir)) {
         fs.mkdirSync(scriptsDir, { recursive: true });
       }
 
-      const cliProvider = getProvider(taskProvider);
-      const scriptContent = cliProvider.buildScheduledScript({
+      const scriptContent = generateScript({
         binaryPath: claudePath,
         binaryDir: claudeDir,
         projectPath,
-        prompt: escapedPrompt,
+        prompt: promptWithStatus,
         autonomous,
         mcpConfigPath,
         logPath,
         homeDir,
+        taskId,
       });
 
-      fs.writeFileSync(scriptPath, scriptContent);
-      fs.chmodSync(scriptPath, '755');
+      fs.writeFileSync(scriptPath, scriptContent, 'utf-8');
+      // chmod is a no-op on Windows; only needed on Unix
+      if (os.platform() !== 'win32') fs.chmodSync(scriptPath, '755');
 
       // If schedule changed, recreate the platform job
       if (scheduleChanged) {
@@ -1078,6 +1110,10 @@ export function registerSchedulerHandlers(deps: SchedulerDeps): void {
 
           // Create new launchd job with updated schedule
           await createLaunchdJob(taskId, schedule, projectPath, prompt, autonomous, taskProvider);
+        } else if (os.platform() === 'win32') {
+          // Remove old node-cron job and re-register
+          removeCronJob(taskId);
+          await createWindowsJob(taskId, schedule, projectPath, prompt, autonomous, taskProvider);
         } else {
           // Remove old cron entry
           await new Promise<void>((resolve) => {
@@ -1127,7 +1163,7 @@ export function registerSchedulerHandlers(deps: SchedulerDeps): void {
         return { success: false, error: 'Task not found' };
       }
 
-      const scriptPath = path.join(os.homedir(), '.dorothy', 'scripts', `${taskId}.sh`);
+      const scriptPath = path.join(os.homedir(), '.dorothy', 'scripts', `${taskId}${SCRIPT_EXT}`);
       if (fs.existsSync(scriptPath)) {
         spawn('bash', [scriptPath], {
           detached: true,
