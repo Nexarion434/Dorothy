@@ -2,12 +2,9 @@ import { ipcMain } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
-import { exec } from 'child_process';
-import { promisify } from 'util';
 import { buildFullPath } from '../utils/path-builder';
 import type { AppSettings } from '../types';
-
-const execAsync = promisify(exec);
+import { findCli } from '../services/cli-detector';
 
 // Scope patterns → friendly service names
 const SCOPE_SERVICE_MAP: Record<string, string> = {
@@ -76,75 +73,11 @@ function deriveServicesFromScopes(scopes: string[]): Record<string, ServiceAcces
 }
 
 async function findGwsBinary(): Promise<string> {
-  const homeDir = os.homedir();
-  const commonPaths = [
-    '/opt/homebrew/bin',
-    '/usr/local/bin',
-    path.join(homeDir, '.local/bin'),
-  ];
-
-  // Add nvm paths
-  const nvmDir = path.join(homeDir, '.nvm/versions/node');
-  if (fs.existsSync(nvmDir)) {
-    try {
-      const versions = fs.readdirSync(nvmDir);
-      for (const version of versions) {
-        commonPaths.push(path.join(nvmDir, version, 'bin'));
-      }
-    } catch {
-      // Ignore
-    }
-  }
-
-  for (const dir of commonPaths) {
-    const gwsPath = path.join(dir, 'gws');
-    if (fs.existsSync(gwsPath)) {
-      return gwsPath;
-    }
-  }
-
-  try {
-    const { stdout } = await execAsync('which gws', {
-      env: { ...process.env, PATH: `${commonPaths.join(':')}:${process.env.PATH}` },
-    });
-    if (stdout.trim()) return stdout.trim();
-  } catch {
-    // Ignore
-  }
-
-  return '';
+  return (await findCli('gws')) ?? '';
 }
 
 async function findGcloudBinary(): Promise<string> {
-  const homeDir = os.homedir();
-  const commonPaths = [
-    '/opt/homebrew/bin',
-    '/usr/local/bin',
-    path.join(homeDir, '.local/bin'),
-    // Homebrew google-cloud-sdk puts gcloud here
-    '/opt/homebrew/share/google-cloud-sdk/bin',
-    '/usr/local/Caskroom/google-cloud-sdk/latest/google-cloud-sdk/bin',
-    path.join(homeDir, 'google-cloud-sdk/bin'),
-  ];
-
-  for (const dir of commonPaths) {
-    const gcloudPath = path.join(dir, 'gcloud');
-    if (fs.existsSync(gcloudPath)) {
-      return gcloudPath;
-    }
-  }
-
-  try {
-    const fullPath = buildFullPath();
-    const { stdout } = await execAsync('which gcloud', {
-      env: { ...process.env, PATH: `${commonPaths.join(':')}:${fullPath}` },
-    });
-    if (stdout.trim()) return stdout.trim();
-  } catch {
-    // Ignore
-  }
-
-  return '';
+  return (await findCli('gcloud')) ?? '';
 }
 
 export function registerGwsHandlers(deps: GwsHandlerDependencies): void {
@@ -178,7 +111,8 @@ export function registerGwsHandlers(deps: GwsHandlerDependencies): void {
       // Include gcloud's directory in PATH so gws can find it
       const gcloudPath = await findGcloudBinary();
       const gcloudDir = gcloudPath ? path.dirname(gcloudPath) : '';
-      const fullPath = [gcloudDir, buildFullPath()].filter(Boolean).join(':');
+      const pathSep = process.platform === 'win32' ? ';' : ':';
+      const fullPath = [gcloudDir, buildFullPath()].filter(Boolean).join(pathSep);
 
       const { stdout } = await execAsync(`"${gwsPath}" auth status --json`, {
         env: { ...process.env, PATH: fullPath },
