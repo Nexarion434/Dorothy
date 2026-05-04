@@ -128,7 +128,6 @@
         }
       ],
       "icon": "public/icon.ico",
-      "artifactName": "Dorothy-Setup-${version}-${arch}.${ext}",
       "publisherName": "Nicolas / The Black Sea",
       "verifyUpdateCodeSignature": false
     },
@@ -139,7 +138,11 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "Dorothy",
-      "include": "build/installer.nsh"
+      "include": "build/installer.nsh",
+      "artifactName": "Dorothy-Setup-${version}-${arch}.${ext}"
+    },
+    "portable": {
+      "artifactName": "Dorothy-${version}-portable-${arch}.${ext}"
     },
     "mac": {
       "category": "public.app-category.developer-tools",

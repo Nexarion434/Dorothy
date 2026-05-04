@@ -14,6 +14,28 @@ import { renameSync, existsSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+/** Sleep synchronously for ms milliseconds. */
+function sleepSync(ms) {
+  const end = Date.now() + ms;
+  while (Date.now() < end) { /* spin */ }
+}
+
+/** Rename with retry — handles transient EPERM on Windows (file watchers, AV). */
+function renameRetry(src, dst, attempts = 8, delayMs = 250) {
+  let lastErr;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      renameSync(src, dst);
+      return;
+    } catch (err) {
+      lastErr = err;
+      if (err.code !== 'EPERM' && err.code !== 'EBUSY' && err.code !== 'EACCES') throw err;
+      sleepSync(delayMs);
+    }
+  }
+  throw lastErr;
+}
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '..');
 
@@ -32,8 +54,12 @@ const iconFile  = path.join(root, 'src', 'app', 'icon.tsx');
 const iconBackup = path.join(root, 'src', 'app', '_icon_backup.tsx');
 
 function restore() {
-  if (existsSync(apiBackup))   renameSync(apiBackup,  apiDir);
-  if (existsSync(iconBackup))  renameSync(iconBackup, iconFile);
+  try {
+    if (existsSync(apiBackup))   renameRetry(apiBackup,  apiDir);
+    if (existsSync(iconBackup))  renameRetry(iconBackup, iconFile);
+  } catch (e) {
+    console.error('  ⚠  restore failed:', e.message);
+  }
 }
 
 // Always restore on exit (clean or error)
@@ -51,9 +77,13 @@ function run(cmd, opts = {}) {
 }
 
 try {
+  // ── 0. Heal from a previously interrupted build (backup still in place) ──
+  if (existsSync(apiBackup) && !existsSync(apiDir))   renameRetry(apiBackup, apiDir);
+  if (existsSync(iconBackup) && !existsSync(iconFile)) renameRetry(iconBackup, iconFile);
+
   // ── 1. Hide API routes and icon from Next.js (Electron build skips them) ──
-  if (existsSync(apiDir))   renameSync(apiDir,   apiBackup);
-  if (existsSync(iconFile)) renameSync(iconFile,  iconBackup);
+  if (existsSync(apiDir))   renameRetry(apiDir,   apiBackup);
+  if (existsSync(iconFile)) renameRetry(iconFile,  iconBackup);
 
   // ── 2. Clean stale Next.js cache (dev server leaves type files that break prod build) ──
   const nextDir = path.join(root, '.next');
