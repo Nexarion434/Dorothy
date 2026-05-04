@@ -12,6 +12,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
+    "postinstall": "node node_modules/electron/install.js",
     "electron:dev": "concurrently \"npm run dev\" \"npm run electron:start\"",
     "electron:start": "wait-on http://localhost:3000 && tsc -p electron/tsconfig.json && cross-env NODE_ENV=development electron .",
     "electron:build:win": "node scripts/build-electron.mjs win",

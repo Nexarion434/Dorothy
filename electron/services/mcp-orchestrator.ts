@@ -16,63 +16,35 @@ import { getAllProviders } from '../providers';
 // ============== Helper Functions ==============
 
 /**
- * Get the path to the bundled MCP orchestrator
- * Always uses the packaged app path - MCP servers are bundled in extraResources
+ * Resolve the directory containing a bundled MCP server.
+ *
+ * In production (packaged app): MCP servers live under `process.resourcesPath`
+ * because they're declared in electron-builder.extraResources.
+ *
+ * In development (`electron .` from the repo): `process.resourcesPath` points
+ * to Electron's own resources dir (no MCP servers there). Fall back to the
+ * project root, which holds the unbundled mcp-* directories.
  */
-export function getMcpOrchestratorPath(): string {
-  // Always use the packaged app path - works for all users
-  return path.join(process.resourcesPath, 'mcp-orchestrator', 'dist', 'bundle.js');
+function getMcpServerDir(name: string): string {
+  if (app.isPackaged) {
+    return path.join(process.resourcesPath, name);
+  }
+  // Dev: app.getAppPath() returns the project root (where package.json lives)
+  return path.join(app.getAppPath(), name);
 }
 
-/**
- * Get the path to the bundled MCP telegram server
- * Always uses the packaged app path - MCP servers are bundled in extraResources
- */
-export function getMcpTelegramPath(): string {
-  // Always use the packaged app path - works for all users
-  return path.join(process.resourcesPath, 'mcp-telegram', 'dist', 'bundle.js');
+/** Path to the bundle.js of a named MCP server. */
+function getMcpBundlePath(name: string): string {
+  return path.join(getMcpServerDir(name), 'dist', 'bundle.js');
 }
 
-/**
- * Get the path to the bundled MCP kanban server
- * Always uses the packaged app path - MCP servers are bundled in extraResources
- */
-export function getMcpKanbanPath(): string {
-  // Always use the packaged app path - works for all users
-  return path.join(process.resourcesPath, 'mcp-kanban', 'dist', 'bundle.js');
-}
-
-/**
- * Get the path to the bundled MCP vault server
- * Always uses the packaged app path - MCP servers are bundled in extraResources
- */
-export function getMcpVaultPath(): string {
-  return path.join(process.resourcesPath, 'mcp-vault', 'dist', 'bundle.js');
-}
-
-/**
- * Get the path to the bundled MCP socialdata server
- * Always uses the packaged app path - MCP servers are bundled in extraResources
- */
-export function getMcpSocialDataPath(): string {
-  return path.join(process.resourcesPath, 'mcp-socialdata', 'dist', 'bundle.js');
-}
-
-/**
- * Get the path to the bundled MCP X server (tweet posting)
- * Always uses the packaged app path - MCP servers are bundled in extraResources
- */
-export function getMcpXPath(): string {
-  return path.join(process.resourcesPath, 'mcp-x', 'dist', 'bundle.js');
-}
-
-/**
- * Get the path to the bundled MCP world server (generative zones)
- * Always uses the packaged app path - MCP servers are bundled in extraResources
- */
-export function getMcpWorldPath(): string {
-  return path.join(process.resourcesPath, 'mcp-world', 'dist', 'bundle.js');
-}
+export function getMcpOrchestratorPath(): string { return getMcpBundlePath('mcp-orchestrator'); }
+export function getMcpTelegramPath():     string { return getMcpBundlePath('mcp-telegram'); }
+export function getMcpKanbanPath():       string { return getMcpBundlePath('mcp-kanban'); }
+export function getMcpVaultPath():        string { return getMcpBundlePath('mcp-vault'); }
+export function getMcpSocialDataPath():   string { return getMcpBundlePath('mcp-socialdata'); }
+export function getMcpXPath():            string { return getMcpBundlePath('mcp-x'); }
+export function getMcpWorldPath():        string { return getMcpBundlePath('mcp-world'); }
 
 /**
  * Auto-setup MCP servers on app start for ALL providers.
