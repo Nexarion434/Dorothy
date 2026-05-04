@@ -13,6 +13,26 @@ import which from 'which';
 
 const IS_WIN = os.platform() === 'win32';
 
+// ── Hook extension ─────────────────────────────────────────────────────────────
+
+/**
+ * Extension to use for Claude Code / Gemini hook scripts.
+ * win32 → '.cmd' (with a co-located .ps1 doing the real work).
+ * unix  → '.sh'  (the original bash hooks).
+ */
+export function getHookExt(): string {
+  return IS_WIN ? '.cmd' : '.sh';
+}
+
+/**
+ * Convert a .sh hook filename to the platform-correct extension.
+ * E.g. 'post-tool-use.sh' → 'post-tool-use.cmd' on win32.
+ */
+export function hookFileForPlatform(file: string): string {
+  if (!IS_WIN) return file;
+  return file.replace(/\.sh$/, '.cmd');
+}
+
 // ── Shell detection ────────────────────────────────────────────────────────────
 
 /**

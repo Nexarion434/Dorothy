@@ -2,6 +2,7 @@ import * as os from 'os';
 import * as path from 'path';
 import * as fs from 'fs';
 import { generateScript, escapeBashArg, escapeCmdArg, qCmd } from '../services/script-generator';
+import { hookFileForPlatform } from '../services/cli-detector';
 import { execSync } from 'child_process';
 import type { AppSettings } from '../types';
 import type {
@@ -215,17 +216,24 @@ export class ClaudeProvider implements CLIProvider {
     type HookEntry = { matcher?: string; hooks: Array<{ type: string; command: string; timeout?: number }> };
 
     for (const { type, file, matcher } of hookFiles) {
-      const commandPath = path.join(hooksDir, file);
+      const platformFile = hookFileForPlatform(file);
+      const commandPath = path.join(hooksDir, platformFile);
       if (!fs.existsSync(commandPath)) continue;
 
+      // Match either the bash filename or the cmd filename to detect existing entries
+      // (handles upgrades from a previous install where the .sh path was registered).
       const existing: HookEntry[] = settings.hooks![type] || [];
       const entryIndex = existing.findIndex((h: HookEntry) =>
-        h.hooks?.some((hh: { command?: string }) => hh.command?.includes(file))
+        h.hooks?.some((hh: { command?: string }) =>
+          hh.command?.includes(file) || hh.command?.includes(platformFile)
+        )
       );
 
       if (entryIndex >= 0) {
         const entry: HookEntry = existing[entryIndex];
-        const hookIndex = entry.hooks.findIndex((hh: { command?: string }) => hh.command?.includes(file));
+        const hookIndex = entry.hooks.findIndex((hh: { command?: string }) =>
+          hh.command?.includes(file) || hh.command?.includes(platformFile)
+        );
         if (hookIndex >= 0 && entry.hooks[hookIndex].command !== commandPath) {
           entry.hooks[hookIndex].command = commandPath;
           updated = true;
