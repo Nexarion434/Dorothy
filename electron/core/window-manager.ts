@@ -126,15 +126,17 @@ export function setupProtocolHandler() {
     console.log('Registering app:// protocol with basePath:', basePath);
 
     protocol.handle('app', (request) => {
-      let urlPath = request.url.replace('app://', '');
+      // Parse the URL properly so we can strip the query string. Next.js App
+      // Router prefetches RSC payloads via `?_rsc=<hash>` and references like
+      // `/agents/__next.tree.txt`; if we keep the query in the filesystem path
+      // the lookup always fails and the renderer logs a 404 to the DevTools
+      // console for every page transition.
+      const url = new URL(request.url);
+      let urlPath = url.pathname; // already without query, host stripped
 
-      // Remove the host part (e.g., "localhost" or "-")
-      const slashIndex = urlPath.indexOf('/');
-      if (slashIndex !== -1) {
-        urlPath = urlPath.substring(slashIndex);
-      } else {
-        urlPath = '/';
-      }
+      const isRscPrefetch = url.searchParams.has('_rsc')
+        || urlPath.endsWith('__next.tree.txt')
+        || urlPath.endsWith('.rsc');
 
       // Default to index.html for directory requests
       if (urlPath === '/' || urlPath === '') {
@@ -149,8 +151,6 @@ export function setupProtocolHandler() {
       // Remove leading slash for path.join
       const relativePath = urlPath.startsWith('/') ? urlPath.substring(1) : urlPath;
       const filePath = path.join(basePath, relativePath);
-
-      console.log(`app:// request: ${request.url} -> ${filePath}`);
 
       // Check if file exists
       if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
@@ -167,6 +167,16 @@ export function setupProtocolHandler() {
       if (fs.existsSync(htmlPath)) {
         return new Response(fs.readFileSync(htmlPath), {
           headers: { 'Content-Type': 'text/html' },
+        });
+      }
+
+      // Next.js RSC prefetch: static export doesn't ship the .rsc / .tree.txt
+      // payloads. Returning 404 floods the DevTools console; return an empty
+      // 200 instead so the client treats the prefetch as a no-op.
+      if (isRscPrefetch) {
+        return new Response('', {
+          status: 200,
+          headers: { 'Content-Type': 'text/plain', 'Cache-Control': 'no-store' },
         });
       }
 
