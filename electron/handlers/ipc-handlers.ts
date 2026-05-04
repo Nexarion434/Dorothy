@@ -616,12 +616,12 @@ function registerAgentHandlers(deps: IpcHandlerDependencies): void {
 
     const resolvedModel = (provider !== 'local') ? (options?.model || agent.model) : undefined;
 
-    const command = cliProvider.buildInteractiveCommand({
+    const commandParams = {
       binaryPath,
       prompt,
       model: resolvedModel,
       verbose: appSettingsForCommand.verboseModeEnabled,
-      permissionMode: isSuperAgentCheck ? 'bypass' : (agent.permissionMode ?? (agent.skipPermissions ? 'auto' : 'normal')),
+      permissionMode: (isSuperAgentCheck ? 'bypass' : (agent.permissionMode ?? (agent.skipPermissions ? 'auto' : 'normal'))) as 'bypass' | 'auto' | 'normal',
       effort: agent.effort,
       secondaryProjectPath: agent.secondaryProjectPath,
       obsidianVaultPaths: agent.obsidianVaultPaths,
@@ -630,7 +630,7 @@ function registerAgentHandlers(deps: IpcHandlerDependencies): void {
       skills: allAgentSkills,
       isSuperAgent: isSuperAgentCheck,
       chrome: appSettingsForCommand.chromeEnabled,
-    });
+    };
 
     // Persist the prompt for future re-launches and update status
     if (prompt.trim()) {
@@ -647,14 +647,67 @@ function registerAgentHandlers(deps: IpcHandlerDependencies): void {
     });
     scheduleTick();
 
-    // First cd to the appropriate directory (worktree if exists, otherwise project), then run claude.
-    // cdAndRun handles platform-specific cd ('cd' on Unix, 'cd /d' on Windows) and quoting.
     const workingPath = agent.worktreePath || agent.projectPath;
-    const fullCommand = cdAndRun(workingPath, command);
 
-    // Wait for the shell to initialize before writing the command.
-    // A freshly-spawned PTY needs time for the shell (bash/cmd) to be ready (~200-500ms).
-    // Local provider always recreates the PTY, so it always needs the delay.
+    // ── Windows: spawn the binary directly, no shell wrapper ──
+    // Avoids quoting / shell-detection ambiguity (cmd.exe vs PowerShell).
+    // node-pty/ConPTY launches .cmd files when given an absolute path.
+    if (process.platform === 'win32' && cliProvider.buildInteractiveArgs) {
+      const args = cliProvider.buildInteractiveArgs(commandParams) ?? [];
+
+      // Kill the existing shell PTY (no longer needed) and spawn the CLI directly.
+      const oldPty = ptyProcesses.get(agent.ptyId!);
+      if (oldPty) {
+        try { oldPty.kill(); } catch { /* ignore */ }
+        ptyProcesses.delete(agent.ptyId!);
+      }
+
+      const directPty = pty.spawn(binaryPath, args, {
+        name: 'xterm-256color',
+        cols: 120,
+        rows: 30,
+        cwd: fs.existsSync(workingPath) ? workingPath : os.homedir(),
+        env: process.env as { [key: string]: string },
+        ...getPtyPlatformOptions(),
+      });
+
+      const directPtyId = uuidv4();
+      ptyProcesses.set(directPtyId, directPty);
+      agent.ptyId = directPtyId;
+
+      const providerEnvVars = cliProvider.getPtyEnvVars(agent.id, agent.projectPath, allAgentSkills);
+      // (env vars already merged via process.env; provider-specific ones are nice-to-have here.)
+      void providerEnvVars;
+
+      directPty.onData((data) => {
+        const a = agents.get(id);
+        if (a && a.ptyId === directPtyId) {
+          a.output.push(data);
+          a.lastActivity = new Date().toISOString();
+          a.statusLine = extractStatusLine(a.output);
+        }
+        broadcastToAllWindows('agent:output', { type: 'output', agentId: id, ptyId: directPtyId, data, timestamp: new Date().toISOString() });
+        scheduleTick();
+      });
+      directPty.onExit(({ exitCode }) => {
+        const a = agents.get(id);
+        if (a && a.ptyId === directPtyId) {
+          a.status = exitCode === 0 ? 'completed' : 'error';
+          a.lastActivity = new Date().toISOString();
+          handleStatusChangeNotification(a, a.status);
+        }
+        ptyProcesses.delete(directPtyId);
+        broadcastToAllWindows('agent:complete', { type: 'complete', agentId: id, ptyId: directPtyId, exitCode, timestamp: new Date().toISOString() });
+        scheduleTick();
+      });
+
+      saveAgents();
+      return { success: true };
+    }
+
+    // ── Unix path (unchanged): write `cd <path> && <command>` to the existing shell PTY ──
+    const command = cliProvider.buildInteractiveCommand(commandParams);
+    const fullCommand = cdAndRun(workingPath, command);
     const needsDelay = ptyJustCreated || provider === 'local';
     if (needsDelay) {
       await new Promise<void>((resolve) => {
@@ -667,9 +720,7 @@ function registerAgentHandlers(deps: IpcHandlerDependencies): void {
       writeProgrammaticInput(ptyProcess, fullCommand);
     }
 
-    // Save updated status
     saveAgents();
-
     return { success: true };
   });
 

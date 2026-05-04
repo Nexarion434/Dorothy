@@ -78,6 +78,14 @@ export interface CLIProvider {
   /** Build command string for interactive PTY sessions */
   buildInteractiveCommand(params: InteractiveCommandParams): string;
 
+  /**
+   * Build the args array for direct binary spawn on Windows (no shell wrapper).
+   * Returns args without the binaryPath itself (which is the spawn target).
+   * Optional: providers without an args-only form return null and the caller
+   * falls back to buildInteractiveCommand via a shell.
+   */
+  buildInteractiveArgs?(params: InteractiveCommandParams): string[] | null;
+
   /** Build command string for scheduled task execution */
   buildScheduledCommand(params: ScheduledCommandParams): string;
 

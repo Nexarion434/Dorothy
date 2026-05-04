@@ -113,6 +113,64 @@ export class ClaudeProvider implements CLIProvider {
     return command;
   }
 
+  /**
+   * Args-only form for direct spawn (Windows): args[] passed to pty.spawn(binaryPath, args, ...).
+   * Mirrors buildInteractiveCommand exactly but as a clean array — no shell quoting needed
+   * because the OS passes each arg as-is to the child process.
+   */
+  buildInteractiveArgs(params: InteractiveCommandParams): string[] {
+    const args: string[] = [];
+
+    if (params.mcpConfigPath && fs.existsSync(params.mcpConfigPath)) {
+      args.push('--mcp-config', params.mcpConfigPath);
+    }
+    if (params.systemPromptFile && fs.existsSync(params.systemPromptFile)) {
+      args.push('--append-system-prompt-file', params.systemPromptFile);
+    }
+    if (params.model) {
+      if (!/^[a-zA-Z0-9._:\/\[\]-]+$/.test(params.model)) {
+        throw new Error('Invalid model name');
+      }
+      args.push('--model', params.model);
+    }
+    if (params.verbose) {
+      args.push('--verbose');
+    }
+    if (params.permissionMode === 'normal') {
+      args.push('--permission-mode', 'default');
+    } else if (params.permissionMode === 'auto') {
+      args.push('--permission-mode', 'auto');
+    } else if (params.permissionMode === 'bypass') {
+      args.push('--dangerously-skip-permissions');
+    }
+    if (params.effort && params.effort !== 'medium') {
+      args.push('--effort', params.effort);
+    }
+    if (params.chrome) {
+      args.push('--chrome');
+    }
+    if (params.secondaryProjectPath) {
+      args.push('--add-dir', params.secondaryProjectPath);
+    }
+    if (params.obsidianVaultPaths) {
+      for (const vp of params.obsidianVaultPaths) {
+        if (fs.existsSync(vp)) args.push('--add-dir', vp);
+      }
+    }
+    args.push('--add-dir', path.join(os.homedir(), '.dorothy'));
+
+    let finalPrompt = params.prompt;
+    if (params.skills && params.skills.length > 0 && !params.isSuperAgent) {
+      const skillsList = params.skills.join(', ');
+      finalPrompt = `[IMPORTANT: Use these skills for this session: ${skillsList}. Invoke them with /<skill-name> when relevant to the task.] ${params.prompt}`;
+    }
+    if (finalPrompt) {
+      args.push(finalPrompt);
+    }
+
+    return args;
+  }
+
   buildScheduledCommand(params: ScheduledCommandParams): string {
     let command = `"${params.binaryPath}"`;
 
