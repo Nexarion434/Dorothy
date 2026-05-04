@@ -11,6 +11,7 @@ import { ensureDataDir, isSuperAgent } from '../utils';
 import { ptyProcesses } from './pty-manager';
 import { buildFullPath } from '../utils/path-builder';
 import { getProvider } from '../providers';
+import { getDefaultShell, getLoginShellArgs, getPtyPlatformOptions } from '../services/cli-detector';
 import { extractStatusLine } from '../utils/ansi';
 import { scheduleTick } from '../utils/agents-tick';
 
@@ -234,7 +235,7 @@ export async function initAgentPty(
   handleStatusChangeNotificationCallback: (agent: AgentStatus, newStatus: string) => void,
   saveAgentsCallback: () => void
 ): Promise<string> {
-  const shell = '/bin/bash';
+  const shell = getDefaultShell();
   let cwd = agent.worktreePath || agent.projectPath;
 
   if (!fs.existsSync(cwd)) {
@@ -295,11 +296,12 @@ export async function initAgentPty(
   const agentProvider = getProvider(agent.provider);
   const providerEnvVars = agentProvider.getPtyEnvVars(agent.id, agent.projectPath, agent.skills);
 
-  const ptyProcess = pty.spawn(shell, ['-l'], {
+  const ptyProcess = pty.spawn(shell, getLoginShellArgs(), {
     name: 'xterm-256color',
     cols: 120,
     rows: 30,
     cwd,
+    ...getPtyPlatformOptions(),
     env: {
       ...process.env as { [key: string]: string },
       PATH: fullPath,
