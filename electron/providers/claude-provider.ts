@@ -411,10 +411,12 @@ export class ClaudeProvider implements CLIProvider {
     const cmdCommand = [
       'set "CLAUDECODE="',
       'set "CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD=1"',
-      `${qCmd(bp)} ${flags} --output-format stream-json --verbose`,
-      `  --mcp-config ${qCmd(mcp)}`,
-      `  --add-dir ${qCmd(path.join(hd, '.dorothy'))}`,
-      `  -p "${escapeCmdArg(params.prompt)}"`,
+      [
+        `${qCmd(bp)} ${flags} --output-format stream-json --verbose`,
+        `--mcp-config ${qCmd(mcp)}`,
+        `--add-dir ${qCmd(path.join(hd, '.dorothy'))}`,
+        `-p "${escapeCmdArg(params.prompt)}"`,
+      ].join(' '),
     ].join('\r\n');
 
     return generateScript({

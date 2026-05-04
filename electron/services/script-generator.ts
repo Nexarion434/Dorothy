@@ -106,13 +106,18 @@ function generateCmdScript(p: ScriptParams): string {
   const flags = p.flags ?? (p.autonomous ? '--dangerously-skip-permissions' : '');
   const promptEscaped = escapeCmdArg(p.prompt);
 
+  // Build the CLI invocation as a single CMD line (no multi-line; ^ continuation is fragile).
+  // Env-var lines stay separate; only the actual binary invocation is one line.
   const cliLine = p.cmdCommand ?? [
     'set "CLAUDECODE="',
     'set "CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD=1"',
-    `${qCmd(p.binaryPath)} ${flags} --output-format stream-json --verbose`,
-    `  --mcp-config ${qCmd(p.mcpConfigPath)}`,
-    `  --add-dir ${qCmd(path.join(p.homeDir, '.dorothy'))}`,
-    `  -p "${promptEscaped}"`,
+    // The binary invocation and all its flags on a single line for CMD compatibility.
+    [
+      `${qCmd(p.binaryPath)} ${flags} --output-format stream-json --verbose`,
+      `--mcp-config ${qCmd(p.mcpConfigPath)}`,
+      `--add-dir ${qCmd(path.join(p.homeDir, '.dorothy'))}`,
+      `-p "${promptEscaped}"`,
+    ].filter(Boolean).join(' '),
   ].join('\r\n');
 
   return [
