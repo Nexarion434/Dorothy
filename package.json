@@ -13,17 +13,23 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "electron:dev": "concurrently \"npm run dev\" \"npm run electron:start\"",
-    "electron:start": "wait-on http://localhost:3000 && tsc -p electron/tsconfig.json && NODE_ENV=development electron .",
-    "electron:build": "bash -c 'set -e; mv src/app/api src/app/_api_backup; mv src/app/icon.tsx src/app/_icon_backup.tsx 2>/dev/null || true; trap \"mv src/app/_api_backup src/app/api 2>/dev/null; mv src/app/_icon_backup.tsx src/app/icon.tsx 2>/dev/null\" EXIT; ELECTRON_BUILD=1 next build; tsc -p electron/tsconfig.json; cd mcp-orchestrator && npm install && npm run build && cd ..; cd mcp-telegram && npm install && npm run build && cd ..; cd mcp-kanban && npm install && npm run build && cd ..; cd mcp-vault && npm install && npm run build && cd ..; cd mcp-socialdata && npm install && npm run build && cd ..; cd mcp-x && npm install && npm run build && cd ..; cd mcp-world && npm install && npm run build && cd ..; electron-builder --mac'",
-    "electron:pack": "tsc -p electron/tsconfig.json && cd mcp-orchestrator && npm install && npm run build && cd .. && cd mcp-telegram && npm install && npm run build && cd .. && cd mcp-kanban && npm install && npm run build && cd .. && cd mcp-vault && npm install && npm run build && cd .. && cd mcp-socialdata && npm install && npm run build && cd .. && cd mcp-x && npm install && npm run build && cd .. && cd mcp-world && npm install && npm run build && cd .. && electron-builder --dir --mac"
+    "electron:start": "wait-on http://localhost:3000 && tsc -p electron/tsconfig.json && cross-env NODE_ENV=development electron .",
+    "electron:build:win": "node scripts/build-electron.mjs win",
+    "electron:build:mac": "node scripts/build-electron.mjs mac",
+    "electron:build:linux": "node scripts/build-electron.mjs linux",
+    "electron:pack:win": "node scripts/build-electron.mjs win --pack",
+    "electron:build": "node scripts/build-electron.mjs mac",
+    "electron:pack": "node scripts/build-electron.mjs mac --pack",
+    "generate:ico": "node scripts/generate-ico.mjs"
   },
   "build": {
     "appId": "io.dorothy.app",
     "productName": "Dorothy",
+    "npmRebuild": false,
     "publish": {
       "provider": "github",
-      "owner": "Charlie85270",
-      "repo": "dorothy"
+      "owner": "Nexarion434",
+      "repo": "Dorothy"
     },
     "directories": {
       "output": "release"
@@ -104,6 +110,25 @@
         ]
       }
     ],
+    "win": {
+      "target": [
+        { "target": "nsis", "arch": ["x64", "arm64"] },
+        { "target": "portable", "arch": ["x64"] }
+      ],
+      "icon": "public/icon.ico",
+      "artifactName": "Dorothy-Setup-${version}-${arch}.${ext}",
+      "publisherName": "Nicolas / The Black Sea",
+      "verifyUpdateCodeSignature": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Dorothy",
+      "include": "build/installer.nsh"
+    },
     "mac": {
       "category": "public.app-category.developer-tools",
       "icon": "public/icon.icns",
