@@ -5,6 +5,9 @@ import * as os from 'os';
 import { spawn } from 'child_process';
 import { getProvider } from '../providers';
 import type { AgentProvider } from '../types';
+import { findCli } from '../services/cli-detector';
+import { generateScript, SCRIPT_EXT } from '../services/script-generator';
+import { registerCronJob, removeCronJob } from '../services/scheduler';
 
 // ============================================
 // Automation IPC handlers
@@ -145,12 +148,13 @@ function intervalToCron(minutes: number): string {
   }
 }
 
-// Get path to a CLI binary — reads user-configured path from app-settings first
+// Get path to a CLI binary — reads user-configured path from app-settings first,
+// then falls back to cross-platform which detection.
 async function getCLIPath(providerId: string = 'claude'): Promise<string> {
   const provider = getProvider(providerId as import('../types').AgentProvider);
   const binaryName = provider.binaryName;
 
-  // Check user-configured path in app-settings.json
+  // Honour manually-configured path
   try {
     const settingsFile = path.join(os.homedir(), '.dorothy', 'app-settings.json');
     if (fs.existsSync(settingsFile)) {
@@ -164,63 +168,7 @@ async function getCLIPath(providerId: string = 'claude'): Promise<string> {
     // Ignore settings read errors
   }
 
-  // Method 1: Run which with bash to get proper PATH (including nvm, etc.)
-  const shellWhich = await new Promise<string | null>((resolve) => {
-    const proc = spawn('/bin/bash', ['-l', '-c', `which ${binaryName}`], {
-      env: { ...process.env, HOME: os.homedir() }
-    });
-    let output = '';
-    proc.stdout.on('data', (data) => { output += data; });
-    proc.on('close', (code) => {
-      if (code === 0 && output.trim()) {
-        resolve(output.trim());
-      } else {
-        resolve(null);
-      }
-    });
-    proc.on('error', () => resolve(null));
-  });
-
-  if (shellWhich && fs.existsSync(shellWhich)) {
-    return shellWhich;
-  }
-
-  // Method 2: Check common locations
-  const commonPaths = [
-    `/usr/local/bin/${binaryName}`,
-    `/opt/homebrew/bin/${binaryName}`,
-    path.join(os.homedir(), `.local/bin/${binaryName}`),
-  ];
-
-  // Also check for any nvm node version
-  const nvmDir = path.join(os.homedir(), '.nvm/versions/node');
-  if (fs.existsSync(nvmDir)) {
-    try {
-      const versions = fs.readdirSync(nvmDir);
-      for (const version of versions) {
-        const binPath = path.join(nvmDir, version, 'bin', binaryName);
-        if (fs.existsSync(binPath)) {
-          return binPath;
-        }
-      }
-    } catch {
-      // Ignore errors
-    }
-  }
-
-  for (const p of commonPaths) {
-    if (fs.existsSync(p)) {
-      return p;
-    }
-  }
-
-  // Fallback
-  return `/usr/local/bin/${binaryName}`;
-}
-
-// Legacy alias for backward compatibility
-async function getClaudePath(): Promise<string> {
-  return getCLIPath('claude');
+  return (await findCli(binaryName)) || binaryName;
 }
 
 // Create launchd job for automation (macOS)
@@ -247,7 +195,7 @@ async function createAutomationLaunchdJob(automation: Automation): Promise<void>
   }
 
   // Create script to run
-  const scriptPath = path.join(os.homedir(), '.dorothy', 'scripts', `automation-${automation.id}.sh`);
+  const scriptPath = path.join(os.homedir(), '.dorothy', 'scripts', `automation-${automation.id}${SCRIPT_EXT}`);
   const scriptsDir = path.dirname(scriptPath);
   if (!fs.existsSync(scriptsDir)) {
     fs.mkdirSync(scriptsDir, { recursive: true });
@@ -273,8 +221,8 @@ async function createAutomationLaunchdJob(automation: Automation): Promise<void>
     homeDir,
   });
 
-  fs.writeFileSync(scriptPath, scriptContent);
-  fs.chmodSync(scriptPath, '755');
+  fs.writeFileSync(scriptPath, scriptContent, 'utf-8');
+  if (os.platform() !== 'win32') fs.chmodSync(scriptPath, '755');
 
   // Build StartCalendarInterval or StartInterval
   const label = `com.dorothy.automation.${automation.id}`;
@@ -337,11 +285,50 @@ ${scheduleXml}
   });
 }
 
+// Create Windows automation job using node-cron
+async function createAutomationWindowsJob(automation: Automation): Promise<void> {
+  const automationProvider: AgentProvider = automation.agent.provider || getDefaultProvider();
+  const cliPath = await getCLIPath(automationProvider);
+  const cliDir = path.dirname(cliPath);
+
+  let cronExpr: string;
+  if (automation.schedule.type === 'cron' && automation.schedule.cron) {
+    cronExpr = automation.schedule.cron;
+  } else {
+    cronExpr = intervalToCron(automation.schedule.intervalMinutes || 60);
+  }
+
+  const scriptPath = path.join(os.homedir(), '.dorothy', 'scripts', `automation-${automation.id}${SCRIPT_EXT}`);
+  const scriptsDir = path.dirname(scriptPath);
+  if (!fs.existsSync(scriptsDir)) fs.mkdirSync(scriptsDir, { recursive: true });
+
+  const logPath = path.join(os.homedir(), '.dorothy', 'logs', `automation-${automation.id}.log`);
+  if (!fs.existsSync(path.dirname(logPath))) fs.mkdirSync(path.dirname(logPath), { recursive: true });
+
+  const prompt = `Use the run_automation MCP tool to run automation with id "${automation.id}". Report the results briefly.`;
+  const mcpConfigPath = path.join(os.homedir(), '.claude', 'mcp.json');
+
+  const scriptContent = generateScript({
+    binaryPath: cliPath,
+    binaryDir: cliDir,
+    projectPath: automation.agent.projectPath || os.homedir(),
+    prompt,
+    autonomous: true,
+    mcpConfigPath,
+    logPath,
+    homeDir: os.homedir(),
+    taskId: automation.id,
+  });
+
+  fs.writeFileSync(scriptPath, scriptContent, 'utf-8');
+  registerCronJob(automation.id, cronExpr, scriptPath);
+}
+
 // Remove launchd job for automation (macOS)
 async function removeAutomationLaunchdJob(automationId: string): Promise<void> {
   const label = `com.dorothy.automation.${automationId}`;
   const plistPath = path.join(os.homedir(), 'Library', 'LaunchAgents', `${label}.plist`);
-  const scriptPath = path.join(os.homedir(), '.dorothy', 'scripts', `automation-${automationId}.sh`);
+  const scriptPath = path.join(os.homedir(), '.dorothy', 'scripts', `automation-${automationId}${SCRIPT_EXT}`);
 
   // Unload from launchd
   const uid = process.getuid?.() || 501;
@@ -459,10 +446,13 @@ export function registerAutomationHandlers(): void {
       automations.push(newAutomation);
       saveAutomations(automations);
 
-      // Create launchd job on macOS
-      if (os.platform() === 'darwin') {
+      // Create platform-specific scheduled job
+      if (os.platform() === 'win32') {
+        await createAutomationWindowsJob(newAutomation);
+      } else if (os.platform() === 'darwin') {
         await createAutomationLaunchdJob(newAutomation);
       }
+      // Linux: no automation scheduling implemented yet (TODO: crontab)
 
       return { success: true, automationId: newAutomation.id };
     } catch (err) {
@@ -495,14 +485,20 @@ export function registerAutomationHandlers(): void {
 
       saveAutomations(automations);
 
-      // Handle enable/disable of launchd job
-      if (os.platform() === 'darwin' && params.enabled !== undefined && params.enabled !== wasEnabled) {
-        if (params.enabled) {
-          // Re-create the launchd job
-          await createAutomationLaunchdJob(automations[index]);
-        } else {
-          // Remove the launchd job
-          await removeAutomationLaunchdJob(id);
+      // Handle enable/disable of platform-specific scheduled job
+      if (params.enabled !== undefined && params.enabled !== wasEnabled) {
+        if (os.platform() === 'win32') {
+          if (params.enabled) {
+            await createAutomationWindowsJob(automations[index]);
+          } else {
+            removeCronJob(id);
+          }
+        } else if (os.platform() === 'darwin') {
+          if (params.enabled) {
+            await createAutomationLaunchdJob(automations[index]);
+          } else {
+            await removeAutomationLaunchdJob(id);
+          }
         }
       }
 
@@ -525,8 +521,12 @@ export function registerAutomationHandlers(): void {
       automations.splice(index, 1);
       saveAutomations(automations);
 
-      // Remove launchd job on macOS
-      if (os.platform() === 'darwin') {
+      // Remove platform-specific scheduled job
+      if (os.platform() === 'win32') {
+        removeCronJob(id);
+        const scriptPath = path.join(os.homedir(), '.dorothy', 'scripts', `automation-${id}${SCRIPT_EXT}`);
+        if (fs.existsSync(scriptPath)) fs.unlinkSync(scriptPath);
+      } else if (os.platform() === 'darwin') {
         await removeAutomationLaunchdJob(id);
       }
 
@@ -546,13 +546,13 @@ export function registerAutomationHandlers(): void {
         return { success: false, error: 'Automation not found' };
       }
 
-      // Run the script directly
-      const scriptPath = path.join(os.homedir(), '.dorothy', 'scripts', `automation-${id}.sh`);
+      // Run the script directly (cross-platform)
+      const scriptPath = path.join(os.homedir(), '.dorothy', 'scripts', `automation-${id}${SCRIPT_EXT}`);
       if (fs.existsSync(scriptPath)) {
-        spawn('bash', [scriptPath], {
-          detached: true,
-          stdio: 'ignore',
-        }).unref();
+        const [cmd, args] = os.platform() === 'win32'
+          ? ['cmd.exe', ['/c', scriptPath]]
+          : ['bash', [scriptPath]];
+        spawn(cmd, args, { detached: true, stdio: 'ignore', shell: false }).unref();
         return { success: true, message: 'Automation triggered' };
       }
 
