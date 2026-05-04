@@ -15,6 +15,19 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 
+// ── BUG-008 instrumentation: log everything that crashes the main process ──
+// Placed at top, before any native-module require, so we catch even module-load failures.
+const __crashLog = path.join(os.tmpdir(), 'dorothy-crash.log');
+function __logCrash(tag: string, err: unknown): void {
+  try {
+    const stack = err instanceof Error ? (err.stack || err.message) : String(err);
+    fs.appendFileSync(__crashLog, `[${new Date().toISOString()}] ${tag}\n${stack}\n\n`);
+  } catch { /* nothing we can do if even fs fails */ }
+}
+process.on('uncaughtException',  (e) => __logCrash('uncaughtException',  e));
+process.on('unhandledRejection', (e) => __logCrash('unhandledRejection', e));
+__logCrash('boot', `pid=${process.pid} packaged=${app.isPackaged} resourcesPath=${process.resourcesPath} appPath=${app.getAppPath()}`);
+
 // Types
 import type { AppSettings, AgentStatus } from './types';
 
@@ -309,6 +322,7 @@ if (process.platform === 'win32') {
 }
 
 app.whenReady().then(async () => {
+  __logCrash('whenReady-entered', 'init starting');
   console.log('App ready, initializing...');
 
   // Ensure data directory exists
@@ -625,6 +639,11 @@ app.whenReady().then(async () => {
   }
 
   console.log('App initialization complete');
+  __logCrash('whenReady-completed', 'init OK');
+}).catch((e) => {
+  __logCrash('whenReady-rejected', e);
+  // keep the app process alive briefly so the crash log can be seen via Event Viewer
+  setTimeout(() => app.exit(1), 200);
 });
 
 // Quit when all windows are closed (except on macOS)
