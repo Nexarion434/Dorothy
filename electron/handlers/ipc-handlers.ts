@@ -18,6 +18,7 @@ import type { AgentStatus, WorktreeConfig, AgentCharacter, AppSettings, AgentPro
 import { buildFullPath } from '../utils/path-builder';
 import { decodeProjectPath } from '../utils/decode-project-path';
 import { getProvider, getAllProviders } from '../providers';
+import { getDefaultShell, getLoginShellArgs, getPtyPlatformOptions } from '../services/cli-detector';
 import { writeProgrammaticInput } from '../core/pty-manager';
 import { extractStatusLine } from '../utils/ansi';
 import { scheduleTick } from '../utils/agents-tick';
@@ -133,14 +134,14 @@ function registerPtyHandlers(deps: IpcHandlerDependencies): void {
   // Create a new PTY terminal
   ipcMain.handle('pty:create', async (_event, { cwd, cols, rows }: { cwd?: string; cols?: number; rows?: number }) => {
     const id = uuidv4();
-    const shell = process.env.SHELL || '/bin/zsh';
 
-    const ptyProcess = pty.spawn(shell, ['-l'], {
+    const ptyProcess = pty.spawn(getDefaultShell(), getLoginShellArgs(), {
       name: 'xterm-256color',
       cols: cols || 80,
       rows: rows || 24,
       cwd: cwd || os.homedir(),
       env: process.env as { [key: string]: string },
+      ...getPtyPlatformOptions(),
     });
 
     ptyProcesses.set(id, ptyProcess);
@@ -224,7 +225,7 @@ function registerAgentHandlers(deps: IpcHandlerDependencies): void {
     obsidianVaultPaths?: string[];
   }) => {
     const id = uuidv4();
-    const shell = '/bin/bash';
+    const shell = getDefaultShell();
 
     // Validate effort against allowed values to prevent shell injection
     const VALID_EFFORTS: AgentEffort[] = ['low', 'medium', 'high'];
@@ -325,11 +326,12 @@ function registerAgentHandlers(deps: IpcHandlerDependencies): void {
 
     let ptyProcess: pty.IPty;
     try {
-      ptyProcess = pty.spawn(shell, ['-l'], {
+      ptyProcess = pty.spawn(shell, getLoginShellArgs(), {
         name: 'xterm-256color',
         cols: 120,
         rows: 30,
         cwd,
+        ...getPtyPlatformOptions(),
         env: {
           ...cleanEnv,
           PATH: fullPath,
@@ -507,11 +509,12 @@ function registerAgentHandlers(deps: IpcHandlerDependencies): void {
       // Local provider uses Claude provider env vars + Tasmania env vars
       const localProviderEnvVars = getProvider('claude').getPtyEnvVars(agent.id, agent.projectPath, agent.skills);
 
-      const newPty = pty.spawn('/bin/bash', ['-l'], {
+      const newPty = pty.spawn(getDefaultShell(), getLoginShellArgs(), {
         name: 'xterm-256color',
         cols: 120,
         rows: 30,
         cwd,
+        ...getPtyPlatformOptions(),
         env: {
           ...cleanEnvLocal,
           PATH: fullPathForLocal,
@@ -1117,17 +1120,16 @@ function registerPluginHandlers(deps: IpcHandlerDependencies): void {
   // contain broken completions like compdef from other tools)
   ipcMain.handle('plugin:install-start', async (_event, { command, cols, rows }: { command: string; cols?: number; rows?: number }) => {
     const id = uuidv4();
-    const shell = process.env.SHELL || '/bin/zsh';
+    const shell = getDefaultShell();
 
     // If the command starts with /, it's a Claude CLI slash command - prefix with 'claude'
     const finalCommand = command.startsWith('/') ? `claude "${command}"` : command;
     const fullPath = buildFullPath();
 
-    // Use -c to run the command directly, skipping rc files to avoid
-    // compdef/completion errors from the user's shell config
-    const shellArgs = shell.endsWith('zsh')
-      ? ['--no-rcs', '-c', finalCommand]
-      : ['-c', finalCommand];
+    // Use -c to run the command directly, skipping rc files where possible
+    const shellArgs = process.platform === 'win32'
+      ? ['/c', finalCommand]
+      : shell.endsWith('zsh') ? ['--no-rcs', '-c', finalCommand] : ['-c', finalCommand];
 
     const ptyProcess = pty.spawn(shell, shellArgs, {
       name: 'xterm-256color',
@@ -1135,6 +1137,7 @@ function registerPluginHandlers(deps: IpcHandlerDependencies): void {
       rows: rows || 24,
       cwd: os.homedir(),
       env: { ...process.env, PATH: fullPath } as { [key: string]: string },
+      ...getPtyPlatformOptions(),
     });
 
     pluginPtyProcesses.set(id, ptyProcess);
@@ -1992,7 +1995,26 @@ function registerShellHandlers(deps: IpcHandlerDependencies): void {
 
   // Open in external terminal
   ipcMain.handle('shell:open-terminal', async (_event, { cwd, command }: { cwd: string; command?: string }) => {
-    const shell = process.env.SHELL || '/bin/zsh';
+    if (process.platform === 'win32') {
+      // On Windows open Windows Terminal (wt) or fall back to cmd.exe
+      const { spawn: cpSpawn } = await import('child_process');
+      const wtArgs = command
+        ? ['-d', cwd, 'cmd', '/k', command]
+        : ['-d', cwd];
+      return new Promise((resolve) => {
+        const proc = cpSpawn('wt', wtArgs, { detached: true, stdio: 'ignore', shell: false });
+        proc.on('error', () => {
+          // wt not available — fall back to cmd.exe
+          cpSpawn('cmd.exe', ['/c', 'start', 'cmd.exe', '/k', command ? `cd /d "${cwd}" && ${command}` : `cd /d "${cwd}"`], {
+            detached: true, stdio: 'ignore', shell: false,
+          }).unref();
+        });
+        proc.unref();
+        resolve({ success: true });
+      });
+    }
+
+    const shell = getDefaultShell();
     const escapedCwd = cwd.replace(/'/g, "'\\''");
     const script = command
       ? `tell application "Terminal" to do script "cd '${escapedCwd}' && ${command}"`
@@ -2016,13 +2038,16 @@ function registerShellHandlers(deps: IpcHandlerDependencies): void {
   // Execute arbitrary command (uses PTY)
   ipcMain.handle('shell:exec', async (_event, { command, cwd }: { command: string; cwd?: string }) => {
     return new Promise((resolve) => {
-      const shell = process.env.SHELL || '/bin/zsh';
-      const ptyProcess = pty.spawn(shell, ['-l', '-c', command], {
+      const execArgs = process.platform === 'win32'
+        ? ['/c', command]
+        : [...getLoginShellArgs(), '-c', command];
+      const ptyProcess = pty.spawn(getDefaultShell(), execArgs, {
         name: 'xterm-256color',
         cols: 80,
         rows: 24,
         cwd: cwd || os.homedir(),
         env: process.env as { [key: string]: string },
+        ...getPtyPlatformOptions(),
       });
 
       let output = '';
@@ -2044,14 +2069,14 @@ function registerShellHandlers(deps: IpcHandlerDependencies): void {
   // Start a new quick terminal PTY
   ipcMain.handle('shell:startPty', async (_event, { cwd, cols, rows }: { cwd?: string; cols?: number; rows?: number }) => {
     const id = uuidv4();
-    const shell = process.env.SHELL || '/bin/zsh';
 
-    const ptyProcess = pty.spawn(shell, ['-l'], {
+    const ptyProcess = pty.spawn(getDefaultShell(), getLoginShellArgs(), {
       name: 'xterm-256color',
       cols: cols || 80,
       rows: rows || 24,
       cwd: cwd || os.homedir(),
       env: process.env as { [key: string]: string },
+      ...getPtyPlatformOptions(),
     });
 
     quickPtyProcesses.set(id, ptyProcess);
