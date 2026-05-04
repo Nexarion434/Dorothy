@@ -18,7 +18,7 @@ import type { AgentStatus, WorktreeConfig, AgentCharacter, AppSettings, AgentPro
 import { buildFullPath } from '../utils/path-builder';
 import { decodeProjectPath } from '../utils/decode-project-path';
 import { getProvider, getAllProviders } from '../providers';
-import { getDefaultShell, getLoginShellArgs, getPtyPlatformOptions, findCli, cdAndRun } from '../services/cli-detector';
+import { getDefaultShell, getAgentShell, getLoginShellArgs, getPtyPlatformOptions, findCli, cdAndRun, quoteArg } from '../services/cli-detector';
 import { writeProgrammaticInput } from '../core/pty-manager';
 import { extractStatusLine } from '../utils/ansi';
 import { scheduleTick } from '../utils/agents-tick';
@@ -225,7 +225,7 @@ function registerAgentHandlers(deps: IpcHandlerDependencies): void {
     obsidianVaultPaths?: string[];
   }) => {
     const id = uuidv4();
-    const shell = getDefaultShell();
+    const shell = getAgentShell();
 
     // Validate effort against allowed values to prevent shell injection
     const VALID_EFFORTS: AgentEffort[] = ['low', 'medium', 'high'];
@@ -509,7 +509,7 @@ function registerAgentHandlers(deps: IpcHandlerDependencies): void {
       // Local provider uses Claude provider env vars + Tasmania env vars
       const localProviderEnvVars = getProvider('claude').getPtyEnvVars(agent.id, agent.projectPath, agent.skills);
 
-      const newPty = pty.spawn(getDefaultShell(), getLoginShellArgs(), {
+      const newPty = pty.spawn(getAgentShell(), getLoginShellArgs(), {
         name: 'xterm-256color',
         cols: 120,
         rows: 30,
@@ -649,114 +649,44 @@ function registerAgentHandlers(deps: IpcHandlerDependencies): void {
 
     const workingPath = agent.worktreePath || agent.projectPath;
 
-    // ── Windows: spawn the binary directly, no shell wrapper ──
-    // Avoids quoting / shell-detection ambiguity (cmd.exe vs PowerShell).
-    // node-pty/ConPTY launches .cmd files when given an absolute path.
+    // Build the command line written into the cmd.exe / bash placeholder PTY.
+    //
+    // Windows: use buildInteractiveArgs() (clean array) + per-arg quoteArg(),
+    // and resolve the bare 'claude' to an absolute .CMD path so cmd.exe
+    // doesn't have to do PATHEXT (and we avoid the 'claude' is not recognized
+    // failure when the parent env's PATH differs from the user shell).
+    // Unix: keep the existing buildInteractiveCommand() output as-is.
+    let command: string;
     if (process.platform === 'win32' && cliProvider.buildInteractiveArgs) {
-      const args = cliProvider.buildInteractiveArgs(commandParams) ?? [];
-
-      // Resolve binaryPath to an absolute path. node-pty/ConPTY does NOT apply
-      // PATHEXT lookup to the executable arg, so a bare 'claude' fails with
-      // ENOENT (Cannot create process, error code: 2). Same bug pattern as BUG-009.
       let resolvedBinaryPath = binaryPath;
       if (!path.isAbsolute(binaryPath)) {
         const found = await findCli(binaryPath);
         if (found) resolvedBinaryPath = found;
       }
+      const args = cliProvider.buildInteractiveArgs(commandParams) ?? [];
+      command = [quoteArg(resolvedBinaryPath), ...args.map(quoteArg)].join(' ');
 
-      const spawnCwd = fs.existsSync(workingPath) ? workingPath : os.homedir();
-
-      // Diagnostic log — survives across runs in %TEMP%/dorothy-crash.log.
-      const crashLog = path.join(os.tmpdir(), 'dorothy-crash.log');
+      // Diagnostic — kept permanently in %TEMP%/dorothy-crash.log so any
+      // future regression surfaces immediately without rebuilding.
       try {
-        fs.appendFileSync(crashLog, `[${new Date().toISOString()}] agent:start variant-A pre-spawn\n${JSON.stringify({
-          binaryPath,
-          resolvedBinaryPath,
-          binaryExists: fs.existsSync(resolvedBinaryPath),
-          argsCount: args.length,
-          firstArgs: args.slice(0, 5),
-          workingPath,
-          workingPathExists: fs.existsSync(workingPath),
-          spawnCwd,
-        }, null, 2)}\n\n`);
+        fs.appendFileSync(path.join(os.tmpdir(), 'dorothy-crash.log'),
+          `[${new Date().toISOString()}] agent:start (variant-B) write\n${JSON.stringify({
+            binaryPath, resolvedBinaryPath,
+            binaryExists: fs.existsSync(resolvedBinaryPath),
+            argsCount: args.length,
+            workingPath, workingPathExists: fs.existsSync(workingPath),
+          }, null, 2)}\n\n`);
       } catch { /* ignore */ }
-
-      // Kill the existing shell PTY (no longer needed) and spawn the CLI directly.
-      const oldPty = ptyProcesses.get(agent.ptyId!);
-      if (oldPty) {
-        try { oldPty.kill(); } catch { /* ignore */ }
-        ptyProcesses.delete(agent.ptyId!);
-      }
-      // Brief delay so the OS releases the killed process's handles.
-      await new Promise<void>((r) => setTimeout(r, 100));
-
-      let directPty: pty.IPty;
-      try {
-        directPty = pty.spawn(resolvedBinaryPath, args, {
-          name: 'xterm-256color',
-          cols: 120,
-          rows: 30,
-          cwd: spawnCwd,
-          env: process.env as { [key: string]: string },
-          ...getPtyPlatformOptions(),
-        });
-      } catch (spawnErr) {
-        // Fallback: wrap via cmd.exe /d /s /c — handles edge cases where node-pty
-        // can't directly launch a .CMD (e.g. very specific PATHEXT or signing issues).
-        try {
-          fs.appendFileSync(crashLog, `[${new Date().toISOString()}] direct spawn FAILED, falling back to cmd.exe wrapper\n${spawnErr instanceof Error ? spawnErr.stack : String(spawnErr)}\n\n`);
-        } catch { /* ignore */ }
-        directPty = pty.spawn('cmd.exe', ['/d', '/s', '/c', resolvedBinaryPath, ...args], {
-          name: 'xterm-256color',
-          cols: 120,
-          rows: 30,
-          cwd: spawnCwd,
-          env: process.env as { [key: string]: string },
-          ...getPtyPlatformOptions(),
-        });
-      }
-
-      const directPtyId = uuidv4();
-      ptyProcesses.set(directPtyId, directPty);
-      agent.ptyId = directPtyId;
-
-      const providerEnvVars = cliProvider.getPtyEnvVars(agent.id, agent.projectPath, allAgentSkills);
-      // (env vars already merged via process.env; provider-specific ones are nice-to-have here.)
-      void providerEnvVars;
-
-      directPty.onData((data) => {
-        const a = agents.get(id);
-        if (a && a.ptyId === directPtyId) {
-          a.output.push(data);
-          a.lastActivity = new Date().toISOString();
-          a.statusLine = extractStatusLine(a.output);
-        }
-        broadcastToAllWindows('agent:output', { type: 'output', agentId: id, ptyId: directPtyId, data, timestamp: new Date().toISOString() });
-        scheduleTick();
-      });
-      directPty.onExit(({ exitCode, signal }) => {
-        try {
-          fs.appendFileSync(path.join(os.tmpdir(), 'dorothy-crash.log'),
-            `[${new Date().toISOString()}] claude pty exit agentId=${id} exitCode=${exitCode} signal=${signal ?? 'none'}\n\n`);
-        } catch { /* ignore */ }
-        const a = agents.get(id);
-        if (a && a.ptyId === directPtyId) {
-          a.status = exitCode === 0 ? 'completed' : 'error';
-          a.lastActivity = new Date().toISOString();
-          handleStatusChangeNotification(a, a.status);
-        }
-        ptyProcesses.delete(directPtyId);
-        broadcastToAllWindows('agent:complete', { type: 'complete', agentId: id, ptyId: directPtyId, exitCode, timestamp: new Date().toISOString() });
-        scheduleTick();
-      });
-
-      saveAgents();
-      return { success: true };
+    } else {
+      command = cliProvider.buildInteractiveCommand(commandParams);
     }
 
-    // ── Unix path (unchanged): write `cd <path> && <command>` to the existing shell PTY ──
-    const command = cliProvider.buildInteractiveCommand(commandParams);
+    // Wrap with platform-appropriate cd: 'cd <q>' on Unix, 'cd /d <q>' on Windows.
     const fullCommand = cdAndRun(workingPath, command);
+
+    // Wait for the placeholder shell to be ready on the very first agent:start
+    // (~200-500ms for cmd.exe / bash to print its prompt). Local provider always
+    // recreates the PTY, so it always needs the delay.
     const needsDelay = ptyJustCreated || provider === 'local';
     if (needsDelay) {
       await new Promise<void>((resolve) => {

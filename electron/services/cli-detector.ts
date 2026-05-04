@@ -69,6 +69,17 @@ export function getDefaultShell(): string {
 }
 
 /**
+ * Shell to use for *agent* PTYs — forces cmd.exe on Windows regardless of
+ * COMSPEC (Win11 sometimes hands Electron a PowerShell-flavoured env which
+ * mangles the cmd-style commands we write into the PTY).
+ * On Unix this falls back to the user's preferred shell, like getDefaultShell().
+ */
+export function getAgentShell(): string {
+  if (IS_WIN) return 'cmd.exe';
+  return process.env.SHELL || '/bin/bash';
+}
+
+/**
  * Return the extra args to pass after the shell binary for a login/interactive
  * session.  On Windows shells do not support '-l'; on Unix keep '-l' so that
  * nvm, homebrew, etc. are in PATH (matches existing behaviour).
