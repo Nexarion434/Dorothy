@@ -655,21 +655,66 @@ function registerAgentHandlers(deps: IpcHandlerDependencies): void {
     if (process.platform === 'win32' && cliProvider.buildInteractiveArgs) {
       const args = cliProvider.buildInteractiveArgs(commandParams) ?? [];
 
+      // Resolve binaryPath to an absolute path. node-pty/ConPTY does NOT apply
+      // PATHEXT lookup to the executable arg, so a bare 'claude' fails with
+      // ENOENT (Cannot create process, error code: 2). Same bug pattern as BUG-009.
+      let resolvedBinaryPath = binaryPath;
+      if (!path.isAbsolute(binaryPath)) {
+        const found = await findCli(binaryPath);
+        if (found) resolvedBinaryPath = found;
+      }
+
+      const spawnCwd = fs.existsSync(workingPath) ? workingPath : os.homedir();
+
+      // Diagnostic log — survives across runs in %TEMP%/dorothy-crash.log.
+      const crashLog = path.join(os.tmpdir(), 'dorothy-crash.log');
+      try {
+        fs.appendFileSync(crashLog, `[${new Date().toISOString()}] agent:start variant-A pre-spawn\n${JSON.stringify({
+          binaryPath,
+          resolvedBinaryPath,
+          binaryExists: fs.existsSync(resolvedBinaryPath),
+          argsCount: args.length,
+          firstArgs: args.slice(0, 5),
+          workingPath,
+          workingPathExists: fs.existsSync(workingPath),
+          spawnCwd,
+        }, null, 2)}\n\n`);
+      } catch { /* ignore */ }
+
       // Kill the existing shell PTY (no longer needed) and spawn the CLI directly.
       const oldPty = ptyProcesses.get(agent.ptyId!);
       if (oldPty) {
         try { oldPty.kill(); } catch { /* ignore */ }
         ptyProcesses.delete(agent.ptyId!);
       }
+      // Brief delay so the OS releases the killed process's handles.
+      await new Promise<void>((r) => setTimeout(r, 100));
 
-      const directPty = pty.spawn(binaryPath, args, {
-        name: 'xterm-256color',
-        cols: 120,
-        rows: 30,
-        cwd: fs.existsSync(workingPath) ? workingPath : os.homedir(),
-        env: process.env as { [key: string]: string },
-        ...getPtyPlatformOptions(),
-      });
+      let directPty: pty.IPty;
+      try {
+        directPty = pty.spawn(resolvedBinaryPath, args, {
+          name: 'xterm-256color',
+          cols: 120,
+          rows: 30,
+          cwd: spawnCwd,
+          env: process.env as { [key: string]: string },
+          ...getPtyPlatformOptions(),
+        });
+      } catch (spawnErr) {
+        // Fallback: wrap via cmd.exe /d /s /c — handles edge cases where node-pty
+        // can't directly launch a .CMD (e.g. very specific PATHEXT or signing issues).
+        try {
+          fs.appendFileSync(crashLog, `[${new Date().toISOString()}] direct spawn FAILED, falling back to cmd.exe wrapper\n${spawnErr instanceof Error ? spawnErr.stack : String(spawnErr)}\n\n`);
+        } catch { /* ignore */ }
+        directPty = pty.spawn('cmd.exe', ['/d', '/s', '/c', resolvedBinaryPath, ...args], {
+          name: 'xterm-256color',
+          cols: 120,
+          rows: 30,
+          cwd: spawnCwd,
+          env: process.env as { [key: string]: string },
+          ...getPtyPlatformOptions(),
+        });
+      }
 
       const directPtyId = uuidv4();
       ptyProcesses.set(directPtyId, directPty);
@@ -689,7 +734,11 @@ function registerAgentHandlers(deps: IpcHandlerDependencies): void {
         broadcastToAllWindows('agent:output', { type: 'output', agentId: id, ptyId: directPtyId, data, timestamp: new Date().toISOString() });
         scheduleTick();
       });
-      directPty.onExit(({ exitCode }) => {
+      directPty.onExit(({ exitCode, signal }) => {
+        try {
+          fs.appendFileSync(path.join(os.tmpdir(), 'dorothy-crash.log'),
+            `[${new Date().toISOString()}] claude pty exit agentId=${id} exitCode=${exitCode} signal=${signal ?? 'none'}\n\n`);
+        } catch { /* ignore */ }
         const a = agents.get(id);
         if (a && a.ptyId === directPtyId) {
           a.status = exitCode === 0 ? 'completed' : 'error';
