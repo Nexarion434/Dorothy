@@ -18,7 +18,7 @@ import type { AgentStatus, WorktreeConfig, AgentCharacter, AppSettings, AgentPro
 import { buildFullPath } from '../utils/path-builder';
 import { decodeProjectPath } from '../utils/decode-project-path';
 import { getProvider, getAllProviders } from '../providers';
-import { getDefaultShell, getLoginShellArgs, getPtyPlatformOptions } from '../services/cli-detector';
+import { getDefaultShell, getLoginShellArgs, getPtyPlatformOptions, findCli } from '../services/cli-detector';
 import { writeProgrammaticInput } from '../core/pty-manager';
 import { extractStatusLine } from '../utils/ansi';
 import { scheduleTick } from '../utils/agents-tick';
@@ -940,12 +940,17 @@ function registerSkillHandlers(deps: IpcHandlerDependencies): void {
     }
 
     const fullPath = buildFullPath();
-    const ptyProcess = pty.spawn('npx', npxArgs, {
+    // Resolve absolute path to npx (npx.cmd on Windows). node-pty / ConPTY does
+    // not apply PATHEXT lookup for the executable arg, so a bare 'npx' on
+    // Windows fails with "Cannot create process, error code: 2" (ENOENT).
+    const npxBinary = (await findCli('npx')) || 'npx';
+    const ptyProcess = pty.spawn(npxBinary, npxArgs, {
       name: 'xterm-256color',
       cols: cols || 80,
       rows: rows || 24,
       cwd: os.homedir(),
       env: { ...process.env, PATH: fullPath } as { [key: string]: string },
+      ...getPtyPlatformOptions(),
     });
 
     skillPtyProcesses.set(id, ptyProcess);
