@@ -347,15 +347,19 @@ export default function ProjectsPage() {
         effort,
       });
 
-      if (prompt) {
-        setTimeout(async () => {
-          await startAgent(agent.id, prompt, { model });
-        }, 600);
-      }
+      // Always auto-launch the CLI after creation. Empty prompt = interactive mode.
+      console.log('[CreateAgent/projects] calling agent:start', { agentId: agent.id, hasPrompt: !!prompt });
+      setTimeout(async () => {
+        try {
+          await startAgent(agent.id, prompt || '', { model });
+        } catch (e) {
+          console.error('[CreateAgent/projects] startAgent failed:', e);
+        }
+      }, 600);
 
       setShowAgentDialog(false);
     } catch (err) {
-      console.error('Failed to create agent:', err);
+      console.error('[CreateAgent/projects] failed to create agent:', err);
     }
   };
 

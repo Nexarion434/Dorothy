@@ -442,6 +442,13 @@ function registerAgentHandlers(deps: IpcHandlerDependencies): void {
     prompt: string;
     options?: { model?: string; resume?: boolean; provider?: AgentProvider; localModel?: string }
   }) => {
+    // Diagnostic — written to %TEMP%/dorothy-crash.log so we can confirm the
+    // IPC was triggered (vs. wondering if the renderer never called it).
+    try {
+      fs.appendFileSync(path.join(os.tmpdir(), 'dorothy-crash.log'),
+        `[${new Date().toISOString()}] agent:start invoked id=${id} hasPrompt=${!!prompt} promptLen=${prompt?.length ?? 0}\n`);
+    } catch { /* ignore */ }
+
     const agent = agents.get(id);
     if (!agent) throw new Error('Agent not found');
 

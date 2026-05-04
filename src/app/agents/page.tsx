@@ -106,13 +106,16 @@ export default function AgentsPage() {
     try {
       const resolvedModel = (provider !== 'local' && model && model !== 'default') ? model : undefined;
       const agent = await createAgent({ projectPath, skills, worktree, character, name, secondaryProjectPath, permissionMode, effort, provider, model: resolvedModel, localModel, obsidianVaultPaths });
-      if (prompt) {
-        const options = { model: resolvedModel, provider, localModel };
-        await startAgent(agent.id, prompt, options);
-      }
+      // Always auto-launch the CLI in the agent PTY after creation, even if no
+      // initial prompt was provided. An empty prompt makes Claude open in
+      // interactive mode, which matches the previous Mac behaviour where the
+      // shell command always ran on Continue.
+      const options = { model: resolvedModel, provider, localModel };
+      console.log('[CreateAgent] calling agent:start', { agentId: agent.id, hasPrompt: !!prompt });
+      await startAgent(agent.id, prompt || '', options);
       setShowNewChatModal(false);
     } catch (error) {
-      console.error('Failed to create agent:', error);
+      console.error('[CreateAgent] failed to create or start agent:', error);
     }
   }, [createAgent, startAgent]);
 
