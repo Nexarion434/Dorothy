@@ -2,9 +2,13 @@ import { ipcMain } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
+import { exec } from 'child_process';
+import { promisify } from 'util';
 import { buildFullPath } from '../utils/path-builder';
 import type { AppSettings } from '../types';
 import { findCli } from '../services/cli-detector';
+
+const execAsync = promisify(exec);
 
 // Scope patterns → friendly service names
 const SCOPE_SERVICE_MAP: Record<string, string> = {

@@ -210,6 +210,7 @@ const CLAUDE_SETTINGS_PATH = path.join(os.homedir(), '.claude', 'settings.json')
 /**
  * Install the statusline script to ~/.dorothy/statusline.sh
  * No-op on Windows: the script requires bash, jq, and awk which are not available.
+ * TODO Phase 4 : version PowerShell de statusline.sh (lit stdin JSON, écrit la stat-line).
  */
 function installScript(): void {
   if (os.platform() === 'win32') {
