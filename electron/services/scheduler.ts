@@ -13,11 +13,11 @@ import * as os from 'os';
 import * as fs from 'fs';
 import * as path from 'path';
 import { spawn } from 'child_process';
-import cron from 'node-cron';
+import { schedule as cronSchedule, ScheduledTask } from 'node-cron';
 import { CLAUDE_SCHEDULES, LOGS_DIR, SCRIPTS_DIR } from '../lib/paths';
 
 interface ScheduledJob {
-  task: cron.ScheduledTask;
+  task: ScheduledTask;
   scriptPath: string;
 }
 
@@ -36,7 +36,7 @@ export function registerCronJob(taskId: string, schedule: string, scriptPath: st
   const logPath = path.join(LOGS_DIR, `${taskId}.log`);
   if (!fs.existsSync(LOGS_DIR)) fs.mkdirSync(LOGS_DIR, { recursive: true });
 
-  const task = cron.schedule(schedule, () => {
+  const task = cronSchedule(schedule, () => {
     const startLine = `=== Task started at ${new Date().toISOString()} ===\n`;
     fs.appendFileSync(logPath, startLine);
 
@@ -52,7 +52,6 @@ export function registerCronJob(taskId: string, schedule: string, scriptPath: st
       fs.appendFileSync(logPath, `=== Task completed at ${new Date().toISOString()} (exit ${code}) ===\n`);
     });
   }, {
-    scheduled: true,
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
   });
 
