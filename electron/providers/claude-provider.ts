@@ -274,8 +274,12 @@ export class ClaudeProvider implements CLIProvider {
 
     for (const { type, file, matcher } of hookFiles) {
       const platformFile = hookFileForPlatform(file);
-      const commandPath = path.join(hooksDir, platformFile);
-      if (!fs.existsSync(commandPath)) continue;
+      const nativePath = path.join(hooksDir, platformFile);
+      if (!fs.existsSync(nativePath)) continue;
+      // Claude Code on Windows pipes hook commands through Git Bash (/usr/bin/bash),
+      // which interprets `\U`, `\A`, etc. as escape sequences and silently strips them.
+      // Always use forward slashes — Windows / cmd.exe / bash all accept them.
+      const commandPath = process.platform === 'win32' ? nativePath.replace(/\\/g, '/') : nativePath;
 
       // Match either the bash filename or the cmd filename to detect existing entries
       // (handles upgrades from a previous install where the .sh path was registered).

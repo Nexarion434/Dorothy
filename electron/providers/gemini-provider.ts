@@ -187,7 +187,9 @@ export class GeminiProvider implements CLIProvider {
 
     for (const { type, file, matcher } of hookFiles) {
       const platformFile = hookFileForPlatform(file);
-      const commandPath = path.join(geminiHooksDir, platformFile);
+      const nativePath = path.join(geminiHooksDir, platformFile);
+      // Force forward slashes on win32 — bash strips backslashes as escapes (see claude-provider).
+      const commandPath = process.platform === 'win32' ? nativePath.replace(/\\/g, '/') : nativePath;
       if (!fs.existsSync(commandPath)) continue;
 
       // Match either bash or cmd filename (handles upgrades)
