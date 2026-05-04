@@ -3,6 +3,9 @@
  *
  * On macOS/Linux: generates a Bash .sh script.
  * On Windows:     generates a CMD .cmd script.
+ *
+ * Each provider can supply its own CLI invocation via bashCommand/cmdCommand.
+ * If omitted the Claude-specific defaults are used.
  */
 
 import * as os from 'os';
@@ -24,21 +27,55 @@ export interface ScriptParams {
   homeDir: string;
   taskId: string;
   flags?: string;
+  /** Full bash CLI invocation line (excluding log redirect). Overrides the default Claude command. */
+  bashCommand?: string;
+  /** Full CMD CLI invocation line (excluding log redirect). Overrides the default Claude command. */
+  cmdCommand?: string;
 }
+
+// ── Quoting helpers ────────────────────────────────────────────────────────────
+
+/** Escape a string for embedding inside a double-quoted CMD argument. */
+export function escapeCmdArg(s: string): string {
+  // In a double-quoted CMD string, only `"` needs escaping (doubled).
+  return s.replace(/"/g, '""');
+}
+
+/** Wrap a path in double-quotes for CMD. */
+export function qCmd(p: string): string {
+  return `"${p}"`;
+}
+
+/** Escape a string for embedding inside a single-quoted bash argument. */
+export function escapeBashArg(s: string): string {
+  return s.replace(/'/g, "'\\''");
+}
+
+// ── Public API ─────────────────────────────────────────────────────────────────
 
 /**
  * Generate the header and body of a scheduled script.
  * The caller is responsible for writing the file and setting executable bits (Unix).
  */
 export function generateScript(params: ScriptParams): string {
-  if (IS_WIN) {
-    return generateCmdScript(params);
-  }
-  return generateBashScript(params);
+  return IS_WIN ? generateCmdScript(params) : generateBashScript(params);
 }
+
+// ── Bash (.sh) ─────────────────────────────────────────────────────────────────
 
 function generateBashScript(p: ScriptParams): string {
   const flags = p.flags ?? (p.autonomous ? '--dangerously-skip-permissions' : '');
+
+  const cliLine = p.bashCommand ?? [
+    'unset CLAUDECODE',
+    `CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD=1 \\`,
+    `  "${p.binaryPath}" ${flags} \\`,
+    `  --output-format stream-json --verbose \\`,
+    `  --mcp-config "${p.mcpConfigPath}" \\`,
+    `  --add-dir "${p.homeDir}/.dorothy" \\`,
+    `  -p '${escapeBashArg(p.prompt)}'`,
+  ].join('\n');
+
   return `#!/usr/bin/env bash
 set -euo pipefail
 
@@ -58,20 +95,37 @@ fi
 export PATH="${p.binaryDir}:$PATH"
 cd "${p.projectPath}"
 echo "=== Task started at $(date) ===" >> "${p.logPath}"
-unset CLAUDECODE
-CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD=1 \\
-  "${p.binaryPath}" ${flags} \\
-  --output-format stream-json --verbose \\
-  --mcp-config "${p.mcpConfigPath}" \\
-  --add-dir "${p.homeDir}/.dorothy" \\
-  -p '${p.prompt}' >> "${p.logPath}" 2>&1
+${cliLine} >> "${p.logPath}" 2>&1
 echo "=== Task completed at $(date) ===" >> "${p.logPath}"
 `;
 }
 
+// ── CMD (.cmd) ─────────────────────────────────────────────────────────────────
+
 function generateCmdScript(p: ScriptParams): string {
   const flags = p.flags ?? (p.autonomous ? '--dangerously-skip-permissions' : '');
-  // Quote paths with spaces using double-quotes
-  const q = (s: string) => `"${s}"`;
-  return `@echo off\r\nsetlocal EnableDelayedExpansion\r\n\r\nset "HOME=${p.homeDir}"\r\nset "PATH=${p.binaryDir};%PATH%"\r\n\r\ncd /d ${q(p.projectPath)}\r\necho === Task started at %DATE% %TIME% === >> ${q(p.logPath)}\r\nset "CLAUDECODE="\r\nset "CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD=1"\r\n${q(p.binaryPath)} ${flags} --output-format stream-json --verbose --mcp-config ${q(p.mcpConfigPath)} --add-dir ${q(path.join(p.homeDir, '.dorothy'))} -p "${p.prompt}" >> ${q(p.logPath)} 2>&1\r\necho === Task completed at %DATE% %TIME% === >> ${q(p.logPath)}\r\n`;
+  const promptEscaped = escapeCmdArg(p.prompt);
+
+  const cliLine = p.cmdCommand ?? [
+    'set "CLAUDECODE="',
+    'set "CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD=1"',
+    `${qCmd(p.binaryPath)} ${flags} --output-format stream-json --verbose`,
+    `  --mcp-config ${qCmd(p.mcpConfigPath)}`,
+    `  --add-dir ${qCmd(path.join(p.homeDir, '.dorothy'))}`,
+    `  -p "${promptEscaped}"`,
+  ].join('\r\n');
+
+  return [
+    '@echo off',
+    'setlocal EnableDelayedExpansion',
+    '',
+    `set "HOME=${p.homeDir}"`,
+    `set "PATH=${p.binaryDir};%PATH%"`,
+    '',
+    `cd /d ${qCmd(p.projectPath)}`,
+    `echo === Task started at %DATE% %TIME% === >> ${qCmd(p.logPath)}`,
+    cliLine + ` >> ${qCmd(p.logPath)} 2>&1`,
+    `echo === Task completed at %DATE% %TIME% === >> ${qCmd(p.logPath)}`,
+    '',
+  ].join('\r\n');
 }

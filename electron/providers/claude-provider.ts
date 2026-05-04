@@ -1,6 +1,7 @@
 import * as os from 'os';
 import * as path from 'path';
 import * as fs from 'fs';
+import { generateScript, escapeBashArg, escapeCmdArg, qCmd } from '../services/script-generator';
 import { execSync } from 'child_process';
 import type { AppSettings } from '../types';
 import type {
@@ -393,30 +394,35 @@ export class ClaudeProvider implements CLIProvider {
     homeDir: string;
   }): string {
     const flags = params.autonomous ? '--dangerously-skip-permissions' : '';
+    const bp = params.binaryPath;
+    const mcp = params.mcpConfigPath;
+    const hd = params.homeDir;
 
-    return `#!/bin/bash
+    const bashCommand = [
+      'unset CLAUDECODE',
+      `CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD=1 \\`,
+      `  "${bp}" ${flags} \\`,
+      `  --output-format stream-json --verbose \\`,
+      `  --mcp-config "${mcp}" \\`,
+      `  --add-dir "${hd}/.dorothy" \\`,
+      `  -p '${escapeBashArg(params.prompt)}'`,
+    ].join('\n');
 
-# Source shell profile for proper PATH (nvm, homebrew, etc.)
-export HOME="${params.homeDir}"
+    const cmdCommand = [
+      'set "CLAUDECODE="',
+      'set "CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD=1"',
+      `${qCmd(bp)} ${flags} --output-format stream-json --verbose`,
+      `  --mcp-config ${qCmd(mcp)}`,
+      `  --add-dir ${qCmd(path.join(hd, '.dorothy'))}`,
+      `  -p "${escapeCmdArg(params.prompt)}"`,
+    ].join('\r\n');
 
-if [ -s "${params.homeDir}/.nvm/nvm.sh" ]; then
-  source "${params.homeDir}/.nvm/nvm.sh" 2>/dev/null || true
-fi
-
-if [ -f "${params.homeDir}/.bashrc" ]; then
-  source "${params.homeDir}/.bashrc" 2>/dev/null || true
-elif [ -f "${params.homeDir}/.bash_profile" ]; then
-  source "${params.homeDir}/.bash_profile" 2>/dev/null || true
-elif [ -f "${params.homeDir}/.zshrc" ]; then
-  source "${params.homeDir}/.zshrc" 2>/dev/null || true
-fi
-
-export PATH="${params.binaryDir}:$PATH"
-cd "${params.projectPath}"
-echo "=== Task started at $(date) ===" >> "${params.logPath}"
-unset CLAUDECODE
-CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD=1 "${params.binaryPath}" ${flags} --output-format stream-json --verbose --mcp-config "${params.mcpConfigPath}" --add-dir "${params.homeDir}/.dorothy" -p '${params.prompt}' >> "${params.logPath}" 2>&1
-echo "=== Task completed at $(date) ===" >> "${params.logPath}"
-`;
+    return generateScript({
+      ...params,
+      taskId: '',
+      flags,
+      bashCommand,
+      cmdCommand,
+    });
   }
 }

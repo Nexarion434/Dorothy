@@ -2,6 +2,7 @@ import * as os from 'os';
 import * as path from 'path';
 import * as fs from 'fs';
 import { execSync } from 'child_process';
+import { generateScript, escapeBashArg, escapeCmdArg, qCmd } from '../services/script-generator';
 import type { AppSettings } from '../types';
 import type {
   CLIProvider,
@@ -345,28 +346,14 @@ export class GeminiProvider implements CLIProvider {
     logPath: string;
     homeDir: string;
   }): string {
-    return `#!/bin/bash
+    const bp = params.binaryPath;
+    const dorothy = path.join(params.homeDir, '.dorothy');
 
-# Source shell profile for proper PATH (nvm, homebrew, etc.)
-export HOME="${params.homeDir}"
-
-if [ -s "${params.homeDir}/.nvm/nvm.sh" ]; then
-  source "${params.homeDir}/.nvm/nvm.sh" 2>/dev/null || true
-fi
-
-if [ -f "${params.homeDir}/.bashrc" ]; then
-  source "${params.homeDir}/.bashrc" 2>/dev/null || true
-elif [ -f "${params.homeDir}/.bash_profile" ]; then
-  source "${params.homeDir}/.bash_profile" 2>/dev/null || true
-elif [ -f "${params.homeDir}/.zshrc" ]; then
-  source "${params.homeDir}/.zshrc" 2>/dev/null || true
-fi
-
-export PATH="${params.binaryDir}:$PATH"
-cd "${params.projectPath}"
-echo "=== Task started at $(date) ===" >> "${params.logPath}"
-"${params.binaryPath}" --output-format stream-json --debug --include-directories "${params.homeDir}/.dorothy" -p '${params.prompt}' >> "${params.logPath}" 2>&1
-echo "=== Task completed at $(date) ===" >> "${params.logPath}"
-`;
+    return generateScript({
+      ...params,
+      taskId: '',
+      bashCommand: `"${bp}" --output-format stream-json --debug --include-directories "${dorothy}" -p '${escapeBashArg(params.prompt)}'`,
+      cmdCommand:  `${qCmd(bp)} --output-format stream-json --debug --include-directories ${qCmd(dorothy)} -p "${escapeCmdArg(params.prompt)}"`,
+    });
   }
 }
