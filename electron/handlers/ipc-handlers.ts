@@ -685,11 +685,19 @@ function registerAgentHandlers(deps: IpcHandlerDependencies): void {
           `argsCount=${args.length} cwd=${spawnCwd}\n`);
       } catch { /* ignore */ }
 
-      // Kill the placeholder shell PTY (it served only as a visual placeholder).
+      // Capture the placeholder's actual cols/rows — xterm.js has already
+      // resized it to the visible terminal size, and we need claude to spawn
+      // at those exact dimensions to avoid TUI rendering artefacts (Ink, the
+      // framework Claude Code uses, redraws by absolute cursor positioning).
       const oldPtyId = agent.ptyId;
+      let inheritedCols = 120;
+      let inheritedRows = 30;
       if (oldPtyId) {
         const oldPty = ptyProcesses.get(oldPtyId);
         if (oldPty) {
+          // node-pty exposes the current dimensions on the IPty instance.
+          if (typeof oldPty.cols === 'number' && oldPty.cols > 0) inheritedCols = oldPty.cols;
+          if (typeof oldPty.rows === 'number' && oldPty.rows > 0) inheritedRows = oldPty.rows;
           try { oldPty.kill(); } catch { /* ignore */ }
           ptyProcesses.delete(oldPtyId);
         }
@@ -701,8 +709,8 @@ function registerAgentHandlers(deps: IpcHandlerDependencies): void {
       try {
         directPty = pty.spawn(resolvedBinaryPath, args, {
           name: 'xterm-256color',
-          cols: 120,
-          rows: 30,
+          cols: inheritedCols,
+          rows: inheritedRows,
           cwd: spawnCwd,
           env: process.env as { [key: string]: string },
           ...getPtyPlatformOptions(),
@@ -713,7 +721,7 @@ function registerAgentHandlers(deps: IpcHandlerDependencies): void {
             `[${new Date().toISOString()}] direct spawn FAILED, falling back to cmd.exe wrapper: ${spawnErr instanceof Error ? spawnErr.message : String(spawnErr)}\n`);
         } catch { /* ignore */ }
         directPty = pty.spawn('cmd.exe', ['/d', '/s', '/c', resolvedBinaryPath, ...args], {
-          name: 'xterm-256color', cols: 120, rows: 30, cwd: spawnCwd,
+          name: 'xterm-256color', cols: inheritedCols, rows: inheritedRows, cwd: spawnCwd,
           env: process.env as { [key: string]: string },
           ...getPtyPlatformOptions(),
         });

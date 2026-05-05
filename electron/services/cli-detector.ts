@@ -100,9 +100,12 @@ export function getLoginShellArgs(): string[] {
 
 /**
  * Return pty.spawn options that are specific to the current OS.
+ * conptyInheritCursor=true: ConPTY redraws the screen on attach, which is
+ * what TUI apps like Claude Code (Ink-based) need to avoid character
+ * duplication / rendering artefacts when the host terminal is resized.
  */
 export function getPtyPlatformOptions(): Record<string, unknown> {
-  return IS_WIN ? { useConpty: true } : {};
+  return IS_WIN ? { useConpty: true, conptyInheritCursor: true } : {};
 }
 
 // ── CLI path detection ─────────────────────────────────────────────────────────
