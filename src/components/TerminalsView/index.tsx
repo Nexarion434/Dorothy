@@ -270,10 +270,12 @@ export default function TerminalsView() {
       tabManager.addAgentToTab(tabManager.activeCustomTab.id, agent.id);
     }
     // Defer start until the terminal for this agent is initialized.
-    // The onTerminalReady callback will fire startAgent once xterm is ready.
-    if (prompt) {
-      pendingStartRef.current = { agentId: agent.id, prompt, options: { model } };
-    }
+    // Always queue a start, even if no prompt was provided — Claude opens in
+    // interactive mode with an empty prompt arg, which is the expected UX
+    // ("Continue" should always launch the CLI, not leave the user with an
+    // idle placeholder shell).
+    console.log('[CreateAgent/dashboard] queueing pending agent:start', { agentId: agent.id, hasPrompt: !!prompt });
+    pendingStartRef.current = { agentId: agent.id, prompt: prompt || '', options: { model } };
     setShowNewChatModal(false);
   }, [createAgent, tabManager]);
 
