@@ -692,18 +692,11 @@ function registerAgentHandlers(deps: IpcHandlerDependencies): void {
       const oldPtyId = agent.ptyId;
       let inheritedCols = 120;
       let inheritedRows = 30;
-      if (oldPtyId) {
-        const oldPty = ptyProcesses.get(oldPtyId);
-        if (oldPty) {
-          // node-pty exposes the current dimensions on the IPty instance.
-          if (typeof oldPty.cols === 'number' && oldPty.cols > 0) inheritedCols = oldPty.cols;
-          if (typeof oldPty.rows === 'number' && oldPty.rows > 0) inheritedRows = oldPty.rows;
-          try { oldPty.kill(); } catch { /* ignore */ }
-          ptyProcesses.delete(oldPtyId);
-        }
+      const oldPty = oldPtyId ? ptyProcesses.get(oldPtyId) : undefined;
+      if (oldPty) {
+        if (typeof oldPty.cols === 'number' && oldPty.cols > 0) inheritedCols = oldPty.cols;
+        if (typeof oldPty.rows === 'number' && oldPty.rows > 0) inheritedRows = oldPty.rows;
       }
-      // Brief delay so Windows releases the previous PID before respawn.
-      await new Promise<void>((r) => setTimeout(r, 100));
 
       let directPty: pty.IPty;
       try {
@@ -727,9 +720,19 @@ function registerAgentHandlers(deps: IpcHandlerDependencies): void {
         });
       }
 
+      // Register the new PTY and re-point the agent BEFORE killing the
+      // placeholder. This way the placeholder's onExit handler sees
+      // `agent.ptyId !== oldPtyId` and correctly skips the status update —
+      // otherwise the agent would briefly flash to status='error' because
+      // a kill() exits with a non-zero code.
       const directPtyId = uuidv4();
       ptyProcesses.set(directPtyId, directPty);
       agent.ptyId = directPtyId;
+
+      if (oldPty && oldPtyId) {
+        try { oldPty.kill(); } catch { /* ignore */ }
+        ptyProcesses.delete(oldPtyId);
+      }
 
       try {
         fs.appendFileSync(path.join(os.tmpdir(), 'dorothy-crash.log'),
