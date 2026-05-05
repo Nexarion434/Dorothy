@@ -1,3 +1,4 @@
+import * as os from 'os';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as pty from 'node-pty';
@@ -6,6 +7,8 @@ import { v4 as uuidv4 } from 'uuid';
 import { agents, saveAgents } from '../../core/agent-manager';
 import { ptyProcesses, writeProgrammaticInput } from '../../core/pty-manager';
 import { buildFullPath } from '../../utils/path-builder';
+import { findCli, getPtyPlatformOptions } from '../cli-detector';
+import { getProvider } from '../../providers';
 import { AgentStatus, AgentCharacter } from '../../types';
 import { RouteApp, RouteContext } from './types';
 
@@ -147,7 +150,7 @@ export function registerAgentRoutes(app_: RouteApp, ctx: RouteContext): void {
   });
 
   // POST /api/agents/:id/start
-  app_.post(/^\/api\/agents\/([^/]+)\/start$/, (req, sendJson) => {
+  app_.post(/^\/api\/agents\/([^/]+)\/start$/, async (req, sendJson) => {
     const agent = agents.get(req.params.id);
     if (!agent) {
       sendJson({ error: 'Agent not found' }, 404);
@@ -162,40 +165,17 @@ export function registerAgentRoutes(app_: RouteApp, ctx: RouteContext): void {
       return;
     }
 
-    const workingDir = (agent.worktreePath || agent.projectPath).replace(/'/g, "'\\''");
-    let command = `cd '${workingDir}' && claude`;
-
+    const workingDir = agent.worktreePath || agent.projectPath;
     const isAutomationAgent = agent.name?.toLowerCase().includes('automation:');
     const usePrintMode = printMode || isAutomationAgent;
-
-    if (usePrintMode) {
-      command += ' -p';
-    }
-
     const isSuperAgentApi = agent.name?.toLowerCase().includes('super agent') ||
                             agent.name?.toLowerCase().includes('orchestrator');
 
-    if (isSuperAgentApi || isAutomationAgent) {
-      const mcpConfigPath = path.join(app.getPath('home'), '.claude', 'mcp.json');
-      if (fs.existsSync(mcpConfigPath)) {
-        command += ` --mcp-config '${mcpConfigPath}'`;
-      }
-    }
-
-    if (agent.secondaryProjectPath) {
-      command += ` --add-dir '${agent.secondaryProjectPath.replace(/'/g, "'\\''")}'`;
-    }
     const effectiveMode = bodyPermissionMode ?? agent.permissionMode ?? (agent.skipPermissions ? 'auto' : 'normal');
-    if (effectiveMode === 'auto' || effectiveMode === 'bypass') {
-      command += ' --dangerously-skip-permissions';
-    }
     const resolvedModel = model || agent.model;
-    if (resolvedModel) {
-      if (!/^[a-zA-Z0-9._:/-]+$/.test(resolvedModel)) {
-        sendJson({ error: 'Invalid model name' }, 400);
-        return;
-      }
-      command += ` --model '${resolvedModel}'`;
+    if (resolvedModel && !/^[a-zA-Z0-9._:/-]+$/.test(resolvedModel)) {
+      sendJson({ error: 'Invalid model name' }, 400);
+      return;
     }
 
     let finalPrompt = prompt;
@@ -203,25 +183,53 @@ export function registerAgentRoutes(app_: RouteApp, ctx: RouteContext): void {
       const skillsList = agent.skills.join(', ');
       finalPrompt = `[IMPORTANT: Use these skills for this session: ${skillsList}. Invoke them with /<skill-name> when relevant to the task.] ${prompt}`;
     }
-    command += ` '${finalPrompt.replace(/'/g, "'\\''")}'`;
 
-    const shell = '/bin/bash';
+    // Resolve the absolute claude binary path. node-pty/ConPTY does not apply
+    // PATHEXT, so a bare 'claude' fails on Windows ('Cannot create process,
+    // error code: 2'). Same fix as ipc-handlers agent:start (#BUG-009/010).
+    const claudeFromSettings = getProvider('claude').resolveBinaryPath(ctx.getAppSettings());
+    let claudeBinary = claudeFromSettings;
+    if (!path.isAbsolute(claudeBinary)) {
+      const found = await findCli(claudeBinary);
+      if (found) claudeBinary = found;
+    }
+
+    // Build args natively as a string[] — no shell escape semantics needed.
+    const args: string[] = [];
+    if (usePrintMode) args.push('-p');
+    if (isSuperAgentApi || isAutomationAgent) {
+      const mcpConfigPath = path.join(app.getPath('home'), '.claude', 'mcp.json');
+      if (fs.existsSync(mcpConfigPath)) args.push('--mcp-config', mcpConfigPath);
+    }
+    if (agent.secondaryProjectPath) args.push('--add-dir', agent.secondaryProjectPath);
+    if (effectiveMode === 'auto' || effectiveMode === 'bypass') args.push('--dangerously-skip-permissions');
+    if (resolvedModel) args.push('--model', resolvedModel);
+    args.push(finalPrompt);
+
     const fullPath = buildFullPath();
+    const spawnCwd = fs.existsSync(workingDir) ? workingDir : os.homedir();
 
-    const ptyProcess = pty.spawn(shell, ['-l', '-c', command], {
-      name: 'xterm-256color',
-      cols: 120,
-      rows: 40,
-      cwd: workingDir,
-      env: {
-        ...process.env,
-        PATH: fullPath,
-        TERM: 'xterm-256color',
-        CLAUDE_SKILLS: agent.skills?.join(',') || '',
-        CLAUDE_AGENT_ID: agent.id,
-        CLAUDE_PROJECT_PATH: agent.projectPath,
-      },
-    });
+    let ptyProcess: pty.IPty;
+    try {
+      ptyProcess = pty.spawn(claudeBinary, args, {
+        name: 'xterm-256color',
+        cols: 120,
+        rows: 40,
+        cwd: spawnCwd,
+        env: {
+          ...process.env,
+          PATH: fullPath,
+          TERM: 'xterm-256color',
+          CLAUDE_SKILLS: agent.skills?.join(',') || '',
+          CLAUDE_AGENT_ID: agent.id,
+          CLAUDE_PROJECT_PATH: agent.projectPath,
+        },
+        ...getPtyPlatformOptions(),
+      });
+    } catch (spawnErr) {
+      sendJson({ error: `Failed to start agent: ${spawnErr instanceof Error ? spawnErr.message : String(spawnErr)}` }, 500);
+      return;
+    }
 
     const ptyId = uuidv4();
     ptyProcesses.set(ptyId, ptyProcess);
