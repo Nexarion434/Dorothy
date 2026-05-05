@@ -734,17 +734,21 @@ function registerAgentHandlers(deps: IpcHandlerDependencies): void {
         ptyProcesses.delete(oldPtyId);
       }
 
-      // Toggle resize a beat after spawn to force Ink (Claude's TUI framework)
-      // to fully re-detect terminal dimensions and redraw. Without this, the
-      // splash banner sometimes overlaps subsequent text because the cursor
-      // positioning was computed against a slightly different size during the
-      // very first frame.
-      setTimeout(() => {
+      // Force Ink to recompute layout at the real terminal size:
+      //   1) Resize to a small size so Ink discards the splash 2-col layout
+      //   2) Resize to the actual size so Ink relays out at full width
+      // A subtle +/-1 toggle was not enough — Ink only triggers a full layout
+      // recompute on a substantial size change. Doing this twice (early +
+      // late) covers both the placeholder→claude handoff and any xterm
+      // resize that happened during spawn.
+      const forceRedraw = () => {
         try {
-          directPty.resize(Math.max(2, inheritedCols - 1), inheritedRows);
+          directPty.resize(60, Math.max(10, inheritedRows));
           directPty.resize(inheritedCols, inheritedRows);
         } catch { /* ignore */ }
-      }, 250);
+      };
+      setTimeout(forceRedraw, 200);
+      setTimeout(forceRedraw, 800);
 
       try {
         fs.appendFileSync(path.join(os.tmpdir(), 'dorothy-crash.log'),
