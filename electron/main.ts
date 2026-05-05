@@ -10,7 +10,7 @@
  * - Scheduler for automated tasks
  */
 
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, Menu } from 'electron';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -320,6 +320,80 @@ registerProtocolSchemes();
 if (process.platform === 'win32') {
   app.setAppUserModelId('io.dorothy.app');
 }
+
+// Build the application menu so the standard Cut/Copy/Paste/SelectAll
+// keyboard accelerators (Ctrl+C/V/X/A on Windows, Cmd+ on macOS) are wired.
+// Without this Electron only auto-installs a menu on macOS — Windows users
+// can't paste into form fields or copy from the terminal.
+function buildAppMenu(): Electron.Menu {
+  const isMac = process.platform === 'darwin';
+  const template: Electron.MenuItemConstructorOptions[] = [
+    ...(isMac ? [{
+      label: app.name,
+      submenu: [
+        { role: 'about' as const },
+        { type: 'separator' as const },
+        { role: 'services' as const },
+        { type: 'separator' as const },
+        { role: 'hide' as const },
+        { role: 'hideOthers' as const },
+        { role: 'unhide' as const },
+        { type: 'separator' as const },
+        { role: 'quit' as const },
+      ],
+    }] : []),
+    {
+      label: 'File',
+      submenu: [isMac ? { role: 'close' as const } : { role: 'quit' as const }],
+    },
+    {
+      label: 'Edit',
+      submenu: [
+        { role: 'undo' as const },
+        { role: 'redo' as const },
+        { type: 'separator' as const },
+        { role: 'cut' as const },
+        { role: 'copy' as const },
+        { role: 'paste' as const },
+        { role: 'pasteAndMatchStyle' as const },
+        { role: 'delete' as const },
+        { role: 'selectAll' as const },
+      ],
+    },
+    {
+      label: 'View',
+      submenu: [
+        { role: 'reload' as const },
+        { role: 'forceReload' as const },
+        { role: 'toggleDevTools' as const },
+        { type: 'separator' as const },
+        { role: 'resetZoom' as const },
+        { role: 'zoomIn' as const },
+        { role: 'zoomOut' as const },
+        { type: 'separator' as const },
+        { role: 'togglefullscreen' as const },
+      ],
+    },
+    {
+      label: 'Window',
+      submenu: [
+        { role: 'minimize' as const },
+        { role: 'zoom' as const },
+        ...(isMac
+          ? [{ type: 'separator' as const }, { role: 'front' as const }]
+          : [{ role: 'close' as const }]),
+      ],
+    },
+    {
+      label: 'Help',
+      submenu: [
+        { label: 'Dorothy', click: () => { /* could open about/help URL later */ } },
+      ],
+    },
+  ];
+  return Menu.buildFromTemplate(template);
+}
+Menu.setApplicationMenu(buildAppMenu());
 
 app.whenReady().then(async () => {
   __logCrash('whenReady-entered', 'init starting');
