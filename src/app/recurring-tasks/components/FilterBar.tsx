@@ -29,7 +29,7 @@ export function FilterBar({
       >
         <option value="all">All Projects</option>
         {projects.map(p => (
-          <option key={p} value={p}>{p.split('/').pop()}</option>
+          <option key={p} value={p}>{p.split(/[\\/]/).pop()}</option>
         ))}
       </select>
 

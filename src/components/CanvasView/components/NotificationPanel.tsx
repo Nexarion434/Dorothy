@@ -81,7 +81,7 @@ function AgentItem({
             )}
           </div>
           <p className="text-xs text-zinc-500 truncate mt-0.5">
-            {agent.projectPath.split('/').pop()}
+            {agent.projectPath.split(/[\\/]/).pop()}
           </p>
           {showAction && agent.status === 'waiting' && (
             <button

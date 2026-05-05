@@ -89,7 +89,7 @@ function getFileExtension(filepath: string): string {
 }
 
 function getFileName(filepath: string): string {
-  return filepath.split('/').pop()?.split('\\').pop() || 'file';
+  return filepath.split(/[\\/]/).pop()?.split('\\').pop() || 'file';
 }
 
 export default function DocumentEditor({ document, folders, defaultFolderId, onSave, onCancel }: DocumentEditorProps) {

@@ -268,7 +268,7 @@ export default function PokemonGame() {
         name: a.name || a.id,
         status: a.status,
         character: a.character,
-        assignedProject: a.projectPath ? a.projectPath.split('/').pop() : undefined,
+        assignedProject: a.projectPath ? a.projectPath.split(/[\\/]/).pop() : undefined,
       }));
       setRawAgents(mapped);
       setAgentNPCs(mapAgentsToNPCs(mapped));

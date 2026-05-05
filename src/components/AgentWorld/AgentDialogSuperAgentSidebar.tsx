@@ -58,7 +58,7 @@ export const AgentDialogSuperAgentSidebar = memo(function AgentDialogSuperAgentS
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-medium truncate">{agent.name}</p>
                       <p className="text-[10px] text-text-muted truncate">
-                        {agent.currentTask?.slice(0, 40) || agent.projectPath.split('/').pop()}
+                        {agent.currentTask?.slice(0, 40) || agent.projectPath.split(/[\\/]/).pop()}
                       </p>
                     </div>
                   </div>
@@ -79,7 +79,7 @@ export const AgentDialogSuperAgentSidebar = memo(function AgentDialogSuperAgentS
                     <span className="text-lg">{face(agent)}</span>
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-medium truncate">{agent.name}</p>
-                      <p className="text-[10px] text-text-muted truncate">{agent.projectPath.split('/').pop()}</p>
+                      <p className="text-[10px] text-text-muted truncate">{agent.projectPath.split(/[\\/]/).pop()}</p>
                     </div>
                   </div>
                 ))}
@@ -98,7 +98,7 @@ export const AgentDialogSuperAgentSidebar = memo(function AgentDialogSuperAgentS
                     <span className="text-lg opacity-60">{face(agent)}</span>
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-medium text-text-secondary truncate">{agent.name}</p>
-                      <p className="text-[10px] text-text-muted truncate">{agent.projectPath.split('/').pop()}</p>
+                      <p className="text-[10px] text-text-muted truncate">{agent.projectPath.split(/[\\/]/).pop()}</p>
                     </div>
                     <span className={`text-[10px] px-1.5 py-0.5 rounded ${STATUS_BG_COLOR[agent.status] || 'bg-text-muted/20'} ${STATUS_COLOR[agent.status] || 'text-text-muted'}`}>
                       {agent.status}

@@ -237,7 +237,7 @@ function buildGraph(
     const agentPath = normalPath(agent.projectPath ?? '');
     const agentMemory = memories.find(m =>
       normalPath(m.projectPath) === agentPath ||
-      normalPath(m.projectPath).endsWith('/' + agentPath.split('/').pop())
+      normalPath(m.projectPath).endsWith('/' + agentPath.split(/[\\/]/).pop())
     );
 
     if (agentMemory?.hasMemory && agentMemory.files?.length) {

@@ -19,7 +19,7 @@ export function useAgentFiltering({ agents, projectFilter, statusFilter, searchQ
   const uniqueProjects = useMemo(() => {
     const projectSet = new Map<string, string>();
     agents.forEach((agent) => {
-      const projectName = agent.projectPath.split('/').pop() || 'Unknown';
+      const projectName = agent.projectPath.split(/[\\/]/).pop() || 'Unknown';
       projectSet.set(agent.projectPath, projectName);
     });
     return Array.from(projectSet.entries()).map(([path, name]) => ({ path, name }));
@@ -36,7 +36,7 @@ export function useAgentFiltering({ agents, projectFilter, statusFilter, searchQ
       const q = searchQuery.toLowerCase();
       filtered = filtered.filter(a => {
         const name = (a.name || '').toLowerCase();
-        const project = (a.projectPath.split('/').pop() || '').toLowerCase();
+        const project = (a.projectPath.split(/[\\/]/).pop() || '').toLowerCase();
         const task = (a.currentTask || '').toLowerCase();
         return name.includes(q) || project.includes(q) || task.includes(q);
       });

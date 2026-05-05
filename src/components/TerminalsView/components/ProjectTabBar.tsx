@@ -31,7 +31,7 @@ export default function ProjectTabBar({
     }
     return Array.from(grouped.entries()).map(([path, stats]) => ({
       path,
-      name: path.split('/').pop() || path,
+      name: path.split(/[\\/]/).pop() || path,
       ...stats,
     }));
   }, [agents]);

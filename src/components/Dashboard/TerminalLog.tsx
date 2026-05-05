@@ -24,7 +24,7 @@ export default function TerminalLog({ history }: TerminalLogProps) {
   };
 
   const getProjectShortName = (projectPath: string) => {
-    const name = projectPath.split('/').pop() || projectPath;
+    const name = projectPath.split(/[\\/]/).pop() || projectPath;
     return name.slice(0, 12);
   };
 

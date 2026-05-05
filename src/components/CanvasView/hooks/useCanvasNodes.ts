@@ -44,7 +44,7 @@ export function useCanvasNodes(
       .filter(agent => !isSuperAgent(agent))
       .forEach((agent) => {
         const projectPath = agent.projectPath;
-        const projectName = projectPath.split('/').pop() || projectPath;
+        const projectName = projectPath.split(/[\\/]/).pop() || projectPath;
 
         if (!projectMap.has(projectPath)) {
           projectMap.set(projectPath, {
@@ -80,7 +80,7 @@ export function useCanvasNodes(
       if (!projectMap.has(agent.projectPath)) {
         projectMap.set(agent.projectPath, {
           path: agent.projectPath,
-          name: agent.projectPath.split('/').pop() || agent.projectPath,
+          name: agent.projectPath.split(/[\\/]/).pop() || agent.projectPath,
         });
       }
     });

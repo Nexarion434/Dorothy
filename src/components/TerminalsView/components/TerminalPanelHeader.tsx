@@ -47,7 +47,7 @@ export default function TerminalPanelHeader({
     ? '🐸'
     : CHARACTER_FACES[agent.character || 'robot'] || '🤖';
   const name = agent.name || `Agent ${agent.id.slice(0, 6)}`;
-  const projectName = agent.projectPath.split('/').pop() || '';
+  const projectName = agent.projectPath.split(/[\\/]/).pop() || '';
   const status = STATUS_COLORS[agent.status] || STATUS_COLORS.idle;
 
   const showDragHandle = tabType === 'custom';

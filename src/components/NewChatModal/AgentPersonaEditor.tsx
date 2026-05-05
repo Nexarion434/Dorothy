@@ -30,7 +30,7 @@ const AgentPersonaEditor = React.memo(function AgentPersonaEditor({
     onChangeRef.current({ character, name: value });
   };
 
-  const projectName = projectPath.split('/').pop() || 'project';
+  const projectName = projectPath.split(/[\\/]/).pop() || 'project';
   const charLabel = CHARACTER_OPTIONS.find(c => c.id === character)?.name || 'Agent';
 
   return (

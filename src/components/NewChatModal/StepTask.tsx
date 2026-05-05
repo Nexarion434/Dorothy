@@ -251,7 +251,7 @@ const StepTask = React.memo(function StepTask({
       <div className="rounded-lg border border-border bg-secondary/30 p-4 space-y-2">
         <span className="text-xs font-medium text-text-muted uppercase tracking-wider">Summary</span>
         <div className="space-y-1.5">
-          <SummaryRow icon={<FolderOpen className="w-3.5 h-3.5" />} label="Project" value={projectPath.split('/').pop() || projectPath} />
+          <SummaryRow icon={<FolderOpen className="w-3.5 h-3.5" />} label="Project" value={projectPath.split(/[\\/]/).pop() || projectPath} />
           <SummaryRow icon={<Sparkles className="w-3.5 h-3.5" />} label="Model" value={`${provider} / ${model}`} />
           {selectedSkills.length > 0 && (
             <SummaryRow icon={<Zap className="w-3.5 h-3.5" />} label="Skills" value={`${selectedSkills.length} selected`} />

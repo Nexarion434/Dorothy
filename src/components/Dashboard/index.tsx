@@ -524,7 +524,7 @@ export default function Dashboard() {
               </h3>
               <div className="space-y-3">
                 {recentHistory.map((entry, index) => {
-                  const projectName = entry.project?.split('/').pop() || 'Unknown';
+                  const projectName = entry.project?.split(/[\\/]/).pop() || 'Unknown';
                   const agent = entry.project ? findAgentForProject(entry.project) : null;
                   const time = new Date(entry.timestamp).toLocaleTimeString('en-US', {
                     hour: '2-digit',
@@ -584,7 +584,7 @@ export default function Dashboard() {
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                 {agents.slice(0, 6).map((agent) => {
-                  const projectName = agent.projectPath.split('/').pop() || 'Unknown';
+                  const projectName = agent.projectPath.split(/[\\/]/).pop() || 'Unknown';
                   const statusColors: Record<string, string> = {
                     running: 'bg-green-500',
                     waiting: 'bg-yellow-500',

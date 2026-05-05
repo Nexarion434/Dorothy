@@ -154,7 +154,7 @@ export function NewTaskModal({ onClose, onCreate }: NewTaskModalProps) {
       if (filePaths && filePaths.length > 0) {
         const newAttachments: TaskAttachment[] = filePaths.map(path => ({
           path,
-          name: path.split('/').pop() || path,
+          name: path.split(/[\\/]/).pop() || path,
           type: getFileType(path),
         }));
         // Avoid duplicates

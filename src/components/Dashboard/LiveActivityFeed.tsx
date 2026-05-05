@@ -18,7 +18,7 @@ export default function LiveActivityFeed({ history, projects }: LiveActivityFeed
   const getProjectName = (projectPath: string) => {
     const project = projects.find(p => p.path === projectPath);
     if (project) return project.name;
-    return projectPath.split('/').pop() || projectPath;
+    return projectPath.split(/[\\/]/).pop() || projectPath;
   };
 
   const formatTime = (timestamp: number) => {

@@ -51,7 +51,7 @@ export function KanbanCard({ task, onEdit, onDelete, onStart, onOpenTerminal, is
   });
 
   // Get project name from path
-  const projectName = task.projectPath.split('/').pop() || task.projectId;
+  const projectName = task.projectPath.split(/[\\/]/).pop() || task.projectId;
 
   const style = {
     transform: CSS.Transform.toString(transform),

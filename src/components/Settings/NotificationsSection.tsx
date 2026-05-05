@@ -21,7 +21,7 @@ function SoundPicker({
   onSaveAppSettings: (updates: Partial<AppSettings>) => void;
 }) {
   const currentPath = appSettings.notificationSounds?.[soundKey];
-  const fileName = currentPath ? currentPath.split('/').pop() : null;
+  const fileName = currentPath ? currentPath.split(/[\\/]/).pop() : null;
 
   const handlePick = async () => {
     if (!window.electronAPI?.dialog?.openAudio) return;

@@ -175,7 +175,7 @@ export default function ProjectsPage() {
         const normalizedPath = selectedPath.replace(/\/+$/, '');
         const existsInCustom = customProjects.some(p => p.path.replace(/\/+$/, '').toLowerCase() === normalizedPath.toLowerCase());
         if (!existsInCustom) {
-          const name = selectedPath.split('/').pop() || 'Unknown Project';
+          const name = selectedPath.split(/[\\/]/).pop() || 'Unknown Project';
           saveCustomProjects([...customProjects, { path: normalizedPath, name, addedAt: new Date().toISOString() }]);
         }
       }
@@ -302,8 +302,8 @@ export default function ProjectsPage() {
     const norm2 = normalizePath(path2);
     if (norm1 === norm2) return true;
     if (norm1.endsWith(norm2) || norm2.endsWith(norm1)) return true;
-    const name1 = norm1.split('/').pop();
-    const name2 = norm2.split('/').pop();
+    const name1 = norm1.split(/[\\/]/).pop();
+    const name2 = norm2.split(/[\\/]/).pop();
     if (name1 && name2 && name1 === name2) {
       const parts1 = norm1.split('/').filter(Boolean);
       const parts2 = norm2.split('/').filter(Boolean);
@@ -595,7 +595,7 @@ export default function ProjectsPage() {
             <p className="text-sm font-medium">Default Project</p>
             <p className="text-xs text-muted-foreground">
               {defaultProjectPath
-                ? <>Auto-selected when creating agents or tasks &mdash; <span className="text-foreground font-mono">{defaultProjectPath.split('/').pop()}</span></>
+                ? <>Auto-selected when creating agents or tasks &mdash; <span className="text-foreground font-mono">{defaultProjectPath.split(/[\\/]/).pop()}</span></>
                 : 'Pin a project to auto-select it when creating agents or kanban tasks'}
             </p>
           </div>
@@ -1101,8 +1101,8 @@ export default function ProjectsPage() {
                   <h3 className="font-medium">Replace Default Project?</h3>
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  <span className="text-foreground font-mono">{defaultProjectPath.split('/').pop()}</span> is currently the default project. Replace it with{' '}
-                  <span className="text-foreground font-mono">{pendingDefaultPath.split('/').pop()}</span>?
+                  <span className="text-foreground font-mono">{defaultProjectPath.split(/[\\/]/).pop()}</span> is currently the default project. Replace it with{' '}
+                  <span className="text-foreground font-mono">{pendingDefaultPath.split(/[\\/]/).pop()}</span>?
                 </p>
                 <div className="flex justify-end gap-2">
                   <button

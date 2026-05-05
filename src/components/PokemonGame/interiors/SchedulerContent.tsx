@@ -77,7 +77,7 @@ export default function SchedulerContent({ onExit }: InteriorContentProps) {
         : 'PENDING';
       const next = formatNextRun(task.nextRun);
       const schedule = task.scheduleHuman || task.schedule;
-      const project = task.projectPath.split('/').pop() || task.projectPath;
+      const project = task.projectPath.split(/[\\/]/).pop() || task.projectPath;
       const agent = task.agentName ? ` | Agent: ${task.agentName}` : '';
 
       return {

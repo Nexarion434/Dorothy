@@ -22,7 +22,7 @@ export default function SidebarProjectBrowser({ agents, onFocusPanel }: SidebarP
     }
     return Array.from(grouped.entries()).map(([path, projectAgents]) => ({
       path,
-      name: path.split('/').pop() || path,
+      name: path.split(/[\\/]/).pop() || path,
       agents: projectAgents,
     }));
   }, [agents]);

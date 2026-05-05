@@ -11,7 +11,7 @@ interface KanbanDoneSummaryProps {
 }
 
 export function KanbanDoneSummary({ task, onClose, onDelete }: KanbanDoneSummaryProps) {
-  const projectName = task.projectPath.split('/').pop() || task.projectId;
+  const projectName = task.projectPath.split(/[\\/]/).pop() || task.projectId;
 
   return (
     <>

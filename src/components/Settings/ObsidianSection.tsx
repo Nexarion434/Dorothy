@@ -75,7 +75,7 @@ export const ObsidianSection = ({ appSettings, onSaveAppSettings }: ObsidianSect
               >
                 <ObsidianIcon className="w-4 h-4 text-[#A88BFA] shrink-0" />
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">{vp.split('/').pop()}</p>
+                  <p className="text-sm font-medium truncate">{vp.split(/[\\/]/).pop()}</p>
                   <p className="text-xs text-muted-foreground font-mono truncate">{vp}</p>
                 </div>
                 <button

@@ -46,7 +46,7 @@ export default function TrayPanel() {
         displayStatus: deriveDisplayStatus(a),
         statusLine: a.statusLine || '',
         currentTask: a.currentTask || '',
-        projectName: a.projectPath ? a.projectPath.split('/').pop() || '' : '',
+        projectName: a.projectPath ? a.projectPath.split(/[\\/]/).pop() || '' : '',
         lastActivity: a.lastActivity,
         provider: a.provider || 'claude',
       }));

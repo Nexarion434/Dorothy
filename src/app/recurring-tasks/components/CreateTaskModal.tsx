@@ -102,7 +102,7 @@ export function CreateTaskModal({
                   <option value="">No agent (use project path below)</option>
                   {agents.map(agent => (
                     <option key={agent.id} value={agent.id}>
-                      {agent.name || agent.id} - {agent.projectPath.split('/').pop()}
+                      {agent.name || agent.id} - {agent.projectPath.split(/[\\/]/).pop()}
                     </option>
                   ))}
                 </select>

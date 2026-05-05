@@ -54,7 +54,7 @@ export const AgentDialogHeader = memo(function AgentDialogHeader({
             ) : (
               <>
                 <span className="font-mono truncate max-w-[200px]">
-                  {agent.projectPath.split('/').pop()}
+                  {agent.projectPath.split(/[\\/]/).pop()}
                 </span>
                 {agent.branchName && (
                   <span className="text-accent-purple flex items-center gap-1">

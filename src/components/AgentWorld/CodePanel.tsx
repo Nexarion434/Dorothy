@@ -436,7 +436,7 @@ export default function CodePanel({ projectPath, className = '' }: CodePanelProp
                 >
                   <div className="flex items-center gap-1">
                     <FileText className="w-3 h-3 text-text-muted shrink-0" />
-                    <span className="truncate">{result.path.split('/').pop()}</span>
+                    <span className="truncate">{result.path.split(/[\\/]/).pop()}</span>
                     {result.line && (
                       <span className="text-[10px] text-cyan-400 shrink-0">:{result.line}</span>
                     )}
@@ -485,7 +485,7 @@ export default function CodePanel({ projectPath, className = '' }: CodePanelProp
             <>
               <div className="px-3 py-1.5 border-b border-border-primary bg-bg-tertiary/20 flex items-center justify-between shrink-0">
                 <span className="text-xs text-text-muted truncate font-mono">
-                  {selectedFile.split('/').pop()}
+                  {selectedFile.split(/[\\/]/).pop()}
                 </span>
                 <div className="flex items-center gap-1">
                   <button

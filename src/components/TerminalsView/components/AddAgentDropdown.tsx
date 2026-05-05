@@ -46,7 +46,7 @@ export default function AddAgentDropdown({
     }
 
     return Array.from(byProject.entries()).map(([path, agents]) => ({
-      projectName: path.split('/').pop() || path,
+      projectName: path.split(/[\\/]/).pop() || path,
       projectPath: path,
       agents,
     }));

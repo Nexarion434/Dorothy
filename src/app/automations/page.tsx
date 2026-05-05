@@ -526,7 +526,7 @@ export default function AutomationsPage() {
                             {automation.agent.projectPath && (
                               <div className="flex items-center gap-1">
                                 <FolderOpen className="w-3 h-3" />
-                                {automation.agent.projectPath.split('/').pop()}
+                                {automation.agent.projectPath.split(/[\\/]/).pop()}
                               </div>
                             )}
 

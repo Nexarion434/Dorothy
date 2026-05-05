@@ -301,7 +301,7 @@ const StepTools = React.memo(function StepTools({
               </button>
               <ObsidianIcon />
               <div className="flex-1 min-w-0">
-                <span className="text-sm font-medium block">{vp.split('/').pop()}</span>
+                <span className="text-sm font-medium block">{vp.split(/[\\/]/).pop()}</span>
                 <span className="text-[11px] text-text-muted font-mono block truncate">{vp}</span>
               </div>
               {vp === detectedVault && (

@@ -234,7 +234,7 @@ export async function getProjects(): Promise<ClaudeProject[]> {
         }
 
         // Extract project name from path
-        const projectName = projectPath.split('/').pop() || entry.name;
+        const projectName = projectPath.split(/[\\/]/).pop() || entry.name;
 
         projects.push({
           id: entry.name,

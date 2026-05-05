@@ -87,7 +87,7 @@ export function TaskCard({
 
             <div className="flex items-center gap-1">
               <FolderOpen className="w-3 h-3" />
-              {task.projectPath.split('/').pop()}
+              {task.projectPath.split(/[\\/]/).pop()}
             </div>
 
             {task.lastRun && (

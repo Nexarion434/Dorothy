@@ -57,7 +57,7 @@ export function AgentDetailPanel({
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h3 className="font-semibold">{agent.name || agent.projectPath.split('/').pop()}</h3>
+              <h3 className="font-semibold">{agent.name || agent.projectPath.split(/[\\/]/).pop()}</h3>
               {agent.provider && agent.provider !== 'claude' && agent.provider !== 'local' && (
                 <span className={`text-[10px] px-1.5 py-0.5 font-medium uppercase tracking-wider ${
                   agent.provider === 'codex' ? 'bg-green-500/15 text-green-600 dark:text-green-400' :

@@ -19,7 +19,7 @@ export const AgentDialogSecondaryProject = memo(function AgentDialogSecondaryPro
   onSetSecondaryProject,
   onBrowseFolder,
 }: AgentDialogSecondaryProjectProps) {
-  const selectedProjectName = agent.secondaryProjectPath?.split('/').pop() || '';
+  const selectedProjectName = agent.secondaryProjectPath?.split(/[\\/]/).pop() || '';
   const unselectedProjects = availableProjects.filter(p => p.path !== agent.secondaryProjectPath);
 
   return (

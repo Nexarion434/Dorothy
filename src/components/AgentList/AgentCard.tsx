@@ -20,7 +20,7 @@ interface AgentCardProps {
 export function AgentCard({ agent, isSelected, onSelect, onEdit }: AgentCardProps) {
   const statusConfig = STATUS_COLORS[agent.status];
   const StatusIcon = statusConfig.icon;
-  const projectName = agent.projectPath.split('/').pop() || 'Unknown';
+  const projectName = agent.projectPath.split(/[\\/]/).pop() || 'Unknown';
   const projectColor = getProjectColor(projectName);
   const isSuper = isSuperAgentCheck(agent);
 

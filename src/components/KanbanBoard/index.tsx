@@ -178,7 +178,7 @@ export default function KanbanBoard() {
     const uniqueProjects = new Map<string, string>();
     tasks.forEach((task) => {
       if (!uniqueProjects.has(task.projectId)) {
-        uniqueProjects.set(task.projectId, task.projectPath.split('/').pop() || task.projectId);
+        uniqueProjects.set(task.projectId, task.projectPath.split(/[\\/]/).pop() || task.projectId);
       }
     });
     return Array.from(uniqueProjects.entries()).map(([id, name]) => ({ id, name }));

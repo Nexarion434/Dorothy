@@ -293,7 +293,7 @@ function Scene({
       {/* Workstations */}
       {uniqueProjects.map((projectPath) => {
         const data = workstationData.get(projectPath)!;
-        const projectName = projectPath.split('/').pop() || 'Project';
+        const projectName = projectPath.split(/[\\/]/).pop() || 'Project';
         const agentWorking = agents.some(
           (a) => a.projectPath === projectPath && (a.status === 'running' || a.status === 'waiting')
         );
@@ -403,7 +403,7 @@ function AgentListItem({
     frog: '🐸',
   };
 
-  const projectName = agent.projectPath.split('/').pop() || 'Unknown';
+  const projectName = agent.projectPath.split(/[\\/]/).pop() || 'Unknown';
   const projectColor = getProjectColor(projectName);
 
   return (
@@ -498,7 +498,7 @@ export default function AgentWorld() {
   const uniqueProjects = useMemo(() => {
     const projectSet = new Map<string, string>();
     agents.forEach((agent) => {
-      const projectName = agent.projectPath.split('/').pop() || 'Unknown';
+      const projectName = agent.projectPath.split(/[\\/]/).pop() || 'Unknown';
       projectSet.set(agent.projectPath, projectName);
     });
     return Array.from(projectSet.entries()).map(([path, name]) => ({ path, name }));
