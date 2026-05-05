@@ -100,12 +100,13 @@ export function getLoginShellArgs(): string[] {
 
 /**
  * Return pty.spawn options that are specific to the current OS.
- * conptyInheritCursor=true: ConPTY redraws the screen on attach, which is
- * what TUI apps like Claude Code (Ink-based) need to avoid character
- * duplication / rendering artefacts when the host terminal is resized.
+ * (rc15 added conptyInheritCursor: true thinking it would help redraw on
+ *  attach, but it actually broke output display entirely — the agent showed
+ *  `running` with 1 output line and a black terminal. That option is meant
+ *  for cmd.exe-style cursor inheritance and confuses TUI apps. Removed.)
  */
 export function getPtyPlatformOptions(): Record<string, unknown> {
-  return IS_WIN ? { useConpty: true, conptyInheritCursor: true } : {};
+  return IS_WIN ? { useConpty: true } : {};
 }
 
 // ── CLI path detection ─────────────────────────────────────────────────────────
