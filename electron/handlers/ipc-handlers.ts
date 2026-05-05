@@ -734,6 +734,18 @@ function registerAgentHandlers(deps: IpcHandlerDependencies): void {
         ptyProcesses.delete(oldPtyId);
       }
 
+      // Toggle resize a beat after spawn to force Ink (Claude's TUI framework)
+      // to fully re-detect terminal dimensions and redraw. Without this, the
+      // splash banner sometimes overlaps subsequent text because the cursor
+      // positioning was computed against a slightly different size during the
+      // very first frame.
+      setTimeout(() => {
+        try {
+          directPty.resize(Math.max(2, inheritedCols - 1), inheritedRows);
+          directPty.resize(inheritedCols, inheritedRows);
+        } catch { /* ignore */ }
+      }, 250);
+
       try {
         fs.appendFileSync(path.join(os.tmpdir(), 'dorothy-crash.log'),
           `[${new Date().toISOString()}] agent:start variant-A SPAWNED ptyId=${directPtyId} agentId=${id}\n`);
