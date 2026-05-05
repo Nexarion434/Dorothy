@@ -663,14 +663,12 @@ function registerAgentHandlers(deps: IpcHandlerDependencies): void {
 
     const workingPath = agent.worktreePath || agent.projectPath;
 
-    // Build the command line written into the cmd.exe / bash placeholder PTY.
-    //
-    // Windows: use buildInteractiveArgs() (clean array) + per-arg quoteArg(),
-    // and resolve the bare 'claude' to an absolute .CMD path so cmd.exe
-    // doesn't have to do PATHEXT (and we avoid the 'claude' is not recognized
-    // failure when the parent env's PATH differs from the user shell).
-    // Unix: keep the existing buildInteractiveCommand() output as-is.
-    let command: string;
+    // ── Windows: Variant A — spawn the CLI binary DIRECTLY as the PTY ──
+    // Tested rc11/rc12: writing into a PowerShell shell PTY via ConPTY does
+    // not execute the line (PowerShell silently swallows piped input).
+    // Variant A bypasses any shell wrapper entirely: pty.spawn(claude.CMD, args)
+    // is launched as the PTY process itself. cwd handled by spawn options,
+    // args passed cleanly as an array. Validated working in isolation.
     if (process.platform === 'win32' && cliProvider.buildInteractiveArgs) {
       let resolvedBinaryPath = binaryPath;
       if (!path.isAbsolute(binaryPath)) {
@@ -678,58 +676,104 @@ function registerAgentHandlers(deps: IpcHandlerDependencies): void {
         if (found) resolvedBinaryPath = found;
       }
       const args = cliProvider.buildInteractiveArgs(commandParams) ?? [];
-      // PowerShell needs the call operator `&` to invoke an executable whose
-      // path is a quoted string, otherwise the line is parsed as a string literal.
-      command = ['&', quoteArg(resolvedBinaryPath), ...args.map(quoteArg)].join(' ');
+      const spawnCwd = fs.existsSync(workingPath) ? workingPath : os.homedir();
 
-      // Diagnostic — kept permanently in %TEMP%/dorothy-crash.log so any
-      // future regression surfaces immediately without rebuilding.
       try {
         fs.appendFileSync(path.join(os.tmpdir(), 'dorothy-crash.log'),
-          `[${new Date().toISOString()}] agent:start (variant-B) write\n${JSON.stringify({
-            binaryPath, resolvedBinaryPath,
-            binaryExists: fs.existsSync(resolvedBinaryPath),
-            argsCount: args.length,
-            workingPath, workingPathExists: fs.existsSync(workingPath),
-          }, null, 2)}\n\n`);
+          `[${new Date().toISOString()}] agent:start variant-A SPAWN agentId=${id} ` +
+          `binary=${resolvedBinaryPath} binaryExists=${fs.existsSync(resolvedBinaryPath)} ` +
+          `argsCount=${args.length} cwd=${spawnCwd}\n`);
       } catch { /* ignore */ }
-    } else {
-      command = cliProvider.buildInteractiveCommand(commandParams);
+
+      // Kill the placeholder shell PTY (it served only as a visual placeholder).
+      const oldPtyId = agent.ptyId;
+      if (oldPtyId) {
+        const oldPty = ptyProcesses.get(oldPtyId);
+        if (oldPty) {
+          try { oldPty.kill(); } catch { /* ignore */ }
+          ptyProcesses.delete(oldPtyId);
+        }
+      }
+      // Brief delay so Windows releases the previous PID before respawn.
+      await new Promise<void>((r) => setTimeout(r, 100));
+
+      let directPty: pty.IPty;
+      try {
+        directPty = pty.spawn(resolvedBinaryPath, args, {
+          name: 'xterm-256color',
+          cols: 120,
+          rows: 30,
+          cwd: spawnCwd,
+          env: process.env as { [key: string]: string },
+          ...getPtyPlatformOptions(),
+        });
+      } catch (spawnErr) {
+        try {
+          fs.appendFileSync(path.join(os.tmpdir(), 'dorothy-crash.log'),
+            `[${new Date().toISOString()}] direct spawn FAILED, falling back to cmd.exe wrapper: ${spawnErr instanceof Error ? spawnErr.message : String(spawnErr)}\n`);
+        } catch { /* ignore */ }
+        directPty = pty.spawn('cmd.exe', ['/d', '/s', '/c', resolvedBinaryPath, ...args], {
+          name: 'xterm-256color', cols: 120, rows: 30, cwd: spawnCwd,
+          env: process.env as { [key: string]: string },
+          ...getPtyPlatformOptions(),
+        });
+      }
+
+      const directPtyId = uuidv4();
+      ptyProcesses.set(directPtyId, directPty);
+      agent.ptyId = directPtyId;
+
+      try {
+        fs.appendFileSync(path.join(os.tmpdir(), 'dorothy-crash.log'),
+          `[${new Date().toISOString()}] agent:start variant-A SPAWNED ptyId=${directPtyId} agentId=${id}\n`);
+      } catch { /* ignore */ }
+
+      // Re-attach output/exit handlers — same broadcast pattern as the placeholder PTY.
+      directPty.onData((data) => {
+        const a = agents.get(id);
+        if (a && a.ptyId === directPtyId) {
+          a.output.push(data);
+          a.lastActivity = new Date().toISOString();
+          a.statusLine = extractStatusLine(a.output);
+          if (getSuperAgentTelegramTask() && isSuperAgent(a)) {
+            const buffer = getSuperAgentOutputBuffer();
+            buffer.push(data);
+            if (buffer.length > 200) setSuperAgentOutputBuffer(buffer.slice(-100));
+          }
+        }
+        broadcastToAllWindows('agent:output', { type: 'output', agentId: id, ptyId: directPtyId, data, timestamp: new Date().toISOString() });
+        scheduleTick();
+      });
+      directPty.onExit(({ exitCode, signal }) => {
+        try {
+          fs.appendFileSync(path.join(os.tmpdir(), 'dorothy-crash.log'),
+            `[${new Date().toISOString()}] variant-A pty exit agentId=${id} exitCode=${exitCode} signal=${signal ?? 'none'}\n`);
+        } catch { /* ignore */ }
+        const a = agents.get(id);
+        if (a && a.ptyId === directPtyId) {
+          a.status = exitCode === 0 ? 'completed' : 'error';
+          a.lastActivity = new Date().toISOString();
+          handleStatusChangeNotification(a, a.status);
+        }
+        ptyProcesses.delete(directPtyId);
+        broadcastToAllWindows('agent:complete', { type: 'complete', agentId: id, ptyId: directPtyId, exitCode, timestamp: new Date().toISOString() });
+        scheduleTick();
+      });
+
+      saveAgents();
+      return { success: true };
     }
 
-    // Wrap with platform-appropriate cd: 'cd <q>' on Unix, 'cd /d <q>' on Windows.
+    // ── Unix path (unchanged): write `cd <path> && <command>` to the existing shell PTY ──
+    const command = cliProvider.buildInteractiveCommand(commandParams);
     const fullCommand = cdAndRun(workingPath, command);
-
-    // Diagnostic — full command + PTY identity dumped to crash log so we can
-    // see exactly what's being written if auto-launch ever fails again.
-    const writeDiagnostic = (phase: string, extra?: string) => {
-      try {
-        fs.appendFileSync(path.join(os.tmpdir(), 'dorothy-crash.log'),
-          `[${new Date().toISOString()}] agent:start ${phase} agentId=${id} ptyId=${agent.ptyId} ` +
-          `ptyAlive=${ptyProcesses.has(agent.ptyId!)} cmdLen=${fullCommand.length}` +
-          (extra ? ` ${extra}` : '') + `\n  command=${fullCommand}\n`);
-      } catch { /* ignore */ }
-    };
-
-    // Wait for the placeholder shell to be ready on the very first agent:start
-    // (~200-500ms for cmd.exe / bash to print its prompt). Local provider always
-    // recreates the PTY, so it always needs the delay.
     const needsDelay = ptyJustCreated || provider === 'local';
-    const doWrite = () => {
-      writeDiagnostic('PRE-WRITE');
-      try {
-        writeProgrammaticInput(ptyProcess, fullCommand);
-        writeDiagnostic('POST-WRITE-OK');
-      } catch (e) {
-        writeDiagnostic('POST-WRITE-THROW', `error=${e instanceof Error ? e.message : String(e)}`);
-      }
-    };
     if (needsDelay) {
       await new Promise<void>((resolve) => {
-        setTimeout(() => { doWrite(); resolve(); }, 500);
+        setTimeout(() => { writeProgrammaticInput(ptyProcess, fullCommand); resolve(); }, 500);
       });
     } else {
-      doWrite();
+      writeProgrammaticInput(ptyProcess, fullCommand);
     }
 
     saveAgents();
