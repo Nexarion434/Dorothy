@@ -347,6 +347,13 @@ function registerAgentHandlers(deps: IpcHandlerDependencies): void {
     const ptyId = uuidv4();
     ptyProcesses.set(ptyId, ptyProcess);
 
+    // Diagnostic — match this ptyId against what the UI shows in the
+    // terminal header to confirm agent:start writes to the visible PTY.
+    try {
+      fs.appendFileSync(path.join(os.tmpdir(), 'dorothy-crash.log'),
+        `[${new Date().toISOString()}] agents:create CREATED ptyId=${ptyId} agentId=${id} shell=${shell}\n`);
+    } catch { /* ignore */ }
+
     // Validate secondary project path if provided
     let secondaryProjectPath: string | undefined;
     if (config.secondaryProjectPath) {

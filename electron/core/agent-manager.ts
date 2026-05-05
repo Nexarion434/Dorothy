@@ -315,6 +315,16 @@ export async function initAgentPty(
   const ptyId = uuidv4();
   ptyProcesses.set(ptyId, ptyProcess);
 
+  // Diagnostic: correlate ptyId with agentId so we can match the value shown
+  // in the UI's terminal header to the one used for agent:start writes.
+  try {
+    const tmpdirImport = require('os') as typeof import('os');
+    const fsImport = require('fs') as typeof import('fs');
+    const pathImport = require('path') as typeof import('path');
+    fsImport.appendFileSync(pathImport.join(tmpdirImport.tmpdir(), 'dorothy-crash.log'),
+      `[${new Date().toISOString()}] initAgentPty CREATED ptyId=${ptyId} agentId=${agent.id} shell=${shell}\n`);
+  } catch { /* ignore */ }
+
   ptyProcess.onData((data) => {
     const agentData = agents.get(agent.id);
     if (agentData) {

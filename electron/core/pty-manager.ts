@@ -57,10 +57,11 @@ export function writeProgrammaticInput(
   data: string,
   bracketPaste = false,
 ): void {
-  // Windows cmd.exe / ConPTY expects CRLF as line terminator for programmatic
-  // input; bash/zsh accept CR alone. Always emit CRLF on win32 so the shell
-  // executes the line we just wrote.
-  const eol = process.platform === 'win32' ? '\r\n' : '\r';
+  // PowerShell + ConPTY: a single CR ('\r') is the Enter keystroke. Sending
+  // CRLF can leave a trailing LF in the input buffer that PowerShell treats
+  // as a separate (empty) line and the typed command is never executed.
+  // CR alone works for both bash and PowerShell.
+  const eol = '\r';
 
   if (bracketPaste && (data.includes('\n') || data.length > 200)) {
     // Bracket paste mode: \x1b[200~ ... \x1b[201~ tells the terminal
