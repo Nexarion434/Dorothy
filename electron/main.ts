@@ -585,9 +585,10 @@ app.whenReady().then(async () => {
 
       let fullCommand: string;
       if (process.platform === 'win32') {
-        // On Windows, quote paths with double-quotes; cmd.exe uses /d to ignore AUTORUN
-        const workingPath = agent.worktreePath || agent.projectPath;
-        fullCommand = `cd /d "${workingPath}" && ${command}`;
+        // PowerShell-flavoured: Set-Location instead of cd /d, ; instead of &&,
+        // single-quotes with '' escape instead of "".
+        const workingPath = (agent.worktreePath || agent.projectPath).replace(/'/g, "''");
+        fullCommand = `Set-Location -LiteralPath '${workingPath}'; ${command}`;
       } else {
         const workingPath = (agent.worktreePath || agent.projectPath).replace(/'/g, "'\\''");
         fullCommand = `cd '${workingPath}' && ${command}`;
@@ -596,9 +597,10 @@ app.whenReady().then(async () => {
       // For long commands, write to a temp script to avoid PTY line-wrapping mangling
       if (fullCommand.length > 100) {
         if (process.platform === 'win32') {
-          const tmpScript = path.join(os.tmpdir(), `claude-agent-${agentId}.cmd`);
-          fs.writeFileSync(tmpScript, `@echo off\r\n${fullCommand}\r\n`, 'utf-8');
-          writeProgrammaticInput(ptyProcess, `cmd /c "${tmpScript}"`);
+          const tmpScript = path.join(os.tmpdir(), `claude-agent-${agentId}.ps1`);
+          fs.writeFileSync(tmpScript, fullCommand + '\r\n', 'utf-8');
+          // Dot-source the .ps1 in the current PowerShell session so it inherits cwd/env.
+          writeProgrammaticInput(ptyProcess, `. '${tmpScript.replace(/'/g, "''")}'`);
         } else {
           const tmpScript = path.join(os.tmpdir(), `claude-agent-${agentId}.sh`);
           fs.writeFileSync(tmpScript, `#!/bin/bash\n${fullCommand}\n`, { mode: 0o755 });

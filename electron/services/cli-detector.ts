@@ -17,20 +17,22 @@ const IS_WIN = os.platform() === 'win32';
 
 /**
  * Quote a single argument for the current shell.
- * Windows (cmd.exe): double-quotes, internal `"` escaped as `""`.
- * Unix (bash/zsh):   single-quotes, internal `'` escaped as `'\''`.
+ * Windows (PowerShell): single-quotes, internal `'` escaped as `''` (literal,
+ *                       no variable interpolation, exactly what we want).
+ * Unix (bash/zsh):      single-quotes, internal `'` escaped as `'\''`.
  */
 export function quoteArg(s: string): string {
-  if (IS_WIN) return `"${s.replace(/"/g, '""')}"`;
+  if (IS_WIN) return `'${s.replace(/'/g, "''")}'`;
   return `'${s.replace(/'/g, "'\\''")}'`;
 }
 
 /**
  * Build a `cd <dir> && <cmd>` prefix for the current shell.
- * Windows uses `cd /d` so a drive change is allowed.
+ * Windows (PowerShell): `Set-Location -LiteralPath <q>; <cmd>`.
+ * Unix (bash):          `cd <q> && <cmd>`.
  */
 export function cdAndRun(dir: string, cmd: string): string {
-  if (IS_WIN) return `cd /d ${quoteArg(dir)} && ${cmd}`;
+  if (IS_WIN) return `Set-Location -LiteralPath ${quoteArg(dir)}; ${cmd}`;
   return `cd ${quoteArg(dir)} && ${cmd}`;
 }
 
@@ -69,18 +71,20 @@ export function getDefaultShell(): string {
 }
 
 /**
- * Shell to use for *agent* PTYs — forces cmd.exe on Windows regardless of
- * COMSPEC. We pass the *absolute* path because Win11 + Windows Terminal
- * sometimes resolves a bare 'cmd.exe' to the user's default profile shell
- * (often PowerShell), which mangles the cmd-style commands we write into
- * the PTY (cd /d, &&, "" quoting all behave differently in PowerShell).
+ * Shell to use for *agent* PTYs.
+ *
+ * On Windows we use PowerShell — it's the default shell that Win11 + Windows
+ * Terminal surface to ConPTY, and trying to force cmd.exe was unreliable
+ * (rc10 still saw PowerShell). All command building below targets PowerShell
+ * syntax: `& 'binary' 'arg' ...`, `Set-Location -LiteralPath`, `;` separator,
+ * single-quoted args with `''` escape.
+ *
  * On Unix this falls back to the user's preferred shell.
  */
 export function getAgentShell(): string {
   if (IS_WIN) {
-    // SystemRoot is always set on Windows; fall back to the canonical path.
     const sysRoot = process.env.SystemRoot || process.env.SYSTEMROOT || 'C:\\Windows';
-    return `${sysRoot}\\System32\\cmd.exe`;
+    return `${sysRoot}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe`;
   }
   return process.env.SHELL || '/bin/bash';
 }

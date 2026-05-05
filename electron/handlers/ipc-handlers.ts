@@ -671,7 +671,9 @@ function registerAgentHandlers(deps: IpcHandlerDependencies): void {
         if (found) resolvedBinaryPath = found;
       }
       const args = cliProvider.buildInteractiveArgs(commandParams) ?? [];
-      command = [quoteArg(resolvedBinaryPath), ...args.map(quoteArg)].join(' ');
+      // PowerShell needs the call operator `&` to invoke an executable whose
+      // path is a quoted string, otherwise the line is parsed as a string literal.
+      command = ['&', quoteArg(resolvedBinaryPath), ...args.map(quoteArg)].join(' ');
 
       // Diagnostic — kept permanently in %TEMP%/dorothy-crash.log so any
       // future regression surfaces immediately without rebuilding.
