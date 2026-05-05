@@ -691,19 +691,36 @@ function registerAgentHandlers(deps: IpcHandlerDependencies): void {
     // Wrap with platform-appropriate cd: 'cd <q>' on Unix, 'cd /d <q>' on Windows.
     const fullCommand = cdAndRun(workingPath, command);
 
+    // Diagnostic — full command + PTY identity dumped to crash log so we can
+    // see exactly what's being written if auto-launch ever fails again.
+    const writeDiagnostic = (phase: string, extra?: string) => {
+      try {
+        fs.appendFileSync(path.join(os.tmpdir(), 'dorothy-crash.log'),
+          `[${new Date().toISOString()}] agent:start ${phase} agentId=${id} ptyId=${agent.ptyId} ` +
+          `ptyAlive=${ptyProcesses.has(agent.ptyId!)} cmdLen=${fullCommand.length}` +
+          (extra ? ` ${extra}` : '') + `\n  command=${fullCommand}\n`);
+      } catch { /* ignore */ }
+    };
+
     // Wait for the placeholder shell to be ready on the very first agent:start
     // (~200-500ms for cmd.exe / bash to print its prompt). Local provider always
     // recreates the PTY, so it always needs the delay.
     const needsDelay = ptyJustCreated || provider === 'local';
+    const doWrite = () => {
+      writeDiagnostic('PRE-WRITE');
+      try {
+        writeProgrammaticInput(ptyProcess, fullCommand);
+        writeDiagnostic('POST-WRITE-OK');
+      } catch (e) {
+        writeDiagnostic('POST-WRITE-THROW', `error=${e instanceof Error ? e.message : String(e)}`);
+      }
+    };
     if (needsDelay) {
       await new Promise<void>((resolve) => {
-        setTimeout(() => {
-          writeProgrammaticInput(ptyProcess, fullCommand);
-          resolve();
-        }, 500);
+        setTimeout(() => { doWrite(); resolve(); }, 500);
       });
     } else {
-      writeProgrammaticInput(ptyProcess, fullCommand);
+      doWrite();
     }
 
     saveAgents();

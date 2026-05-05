@@ -70,12 +70,18 @@ export function getDefaultShell(): string {
 
 /**
  * Shell to use for *agent* PTYs — forces cmd.exe on Windows regardless of
- * COMSPEC (Win11 sometimes hands Electron a PowerShell-flavoured env which
- * mangles the cmd-style commands we write into the PTY).
- * On Unix this falls back to the user's preferred shell, like getDefaultShell().
+ * COMSPEC. We pass the *absolute* path because Win11 + Windows Terminal
+ * sometimes resolves a bare 'cmd.exe' to the user's default profile shell
+ * (often PowerShell), which mangles the cmd-style commands we write into
+ * the PTY (cd /d, &&, "" quoting all behave differently in PowerShell).
+ * On Unix this falls back to the user's preferred shell.
  */
 export function getAgentShell(): string {
-  if (IS_WIN) return 'cmd.exe';
+  if (IS_WIN) {
+    // SystemRoot is always set on Windows; fall back to the canonical path.
+    const sysRoot = process.env.SystemRoot || process.env.SYSTEMROOT || 'C:\\Windows';
+    return `${sysRoot}\\System32\\cmd.exe`;
+  }
   return process.env.SHELL || '/bin/bash';
 }
 
