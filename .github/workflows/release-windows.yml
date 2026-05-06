@@ -1,0 +1,59 @@
+name: Release Windows
+
+# Triggers a Windows build + GitHub Release whenever you push a tag
+# matching v*.*.* (e.g. v1.2.8, v0.1.0-windows-rc27).
+#
+# How to publish a new release:
+#   1. Bump version in package.json
+#   2. git commit -am "chore: release v1.2.8"
+#   3. git tag v1.2.8 && git push origin v1.2.8
+#   4. This workflow builds the NSIS installer + portable + latest.yml
+#      and attaches them to a GitHub Release.
+#   5. End users on existing installs get an in-app update banner
+#      (electron-updater reads latest.yml from the release assets).
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+      - 'v*.*.*-*'
+
+permissions:
+  contents: write  # needed to create the release
+
+jobs:
+  build:
+    name: Build Windows installer
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Electron app for Windows
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Skip code-signing in CI (we don't have an EV cert yet).
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: npm run electron:build:win
+
+      - name: Upload artifacts to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release/Dorothy-Setup-*.exe
+            release/Dorothy-Setup-*.exe.blockmap
+            release/Dorothy-*-portable-*.exe
+            release/latest.yml
+          generate_release_notes: true
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-rc') || contains(github.ref_name, '-alpha') || contains(github.ref_name, '-beta') }}
