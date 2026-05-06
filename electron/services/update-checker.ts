@@ -74,12 +74,31 @@ async function checkGitHubRelease(mainWindow: BrowserWindow | null) {
     if (na > nb) break;
   }
 
-  // Find download asset
+  // Find download asset — pick the one matching the user's platform.
   let downloadUrl = '';
   if (data.assets && Array.isArray(data.assets)) {
-    const dmgAsset = data.assets.find((a: { name: string }) => a.name.endsWith('.dmg'));
-    const zipAsset = data.assets.find((a: { name: string }) => a.name.endsWith('.zip'));
-    downloadUrl = (dmgAsset || zipAsset)?.browser_download_url || '';
+    const findAsset = (suffix: string) =>
+      data.assets.find((a: { name: string }) => a.name.toLowerCase().endsWith(suffix));
+    const arch = process.arch === 'arm64' ? 'arm64' : 'x64';
+
+    let preferred;
+    if (process.platform === 'darwin') {
+      preferred = findAsset('.dmg') || findAsset('.zip');
+    } else if (process.platform === 'win32') {
+      // Prefer the arch-specific NSIS installer, then any setup, then portable.
+      preferred =
+        data.assets.find((a: { name: string }) =>
+          a.name.toLowerCase().includes('setup') &&
+          a.name.toLowerCase().includes(arch) &&
+          a.name.toLowerCase().endsWith('.exe')) ||
+        data.assets.find((a: { name: string }) =>
+          a.name.toLowerCase().includes('setup') && a.name.toLowerCase().endsWith('.exe')) ||
+        findAsset('-portable.exe') ||
+        findAsset('.exe');
+    } else if (process.platform === 'linux') {
+      preferred = findAsset('.appimage') || findAsset('.deb') || findAsset('.rpm');
+    }
+    downloadUrl = preferred?.browser_download_url || '';
   }
 
   const info = {
