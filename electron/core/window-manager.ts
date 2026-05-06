@@ -1,4 +1,4 @@
-import { BrowserWindow, protocol, app } from 'electron';
+import { BrowserWindow, protocol, app, Menu, clipboard } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
 import { getAppBasePath } from '../utils';
@@ -62,6 +62,76 @@ export function createWindow() {
 
   mainWindow.webContents.on('did-finish-load', () => {
     console.log('Page loaded successfully');
+  });
+
+  // ── Copy/paste hard-wiring (Windows fix) ───────────────────────────────────
+  // The application menu accelerators are unreliable when the title bar is
+  // hidden, so we intercept Ctrl+C / Ctrl+V / Ctrl+X / Ctrl+A directly via
+  // `before-input-event` and call the WebContents edit commands manually.
+  // Works in form fields and falls through harmlessly elsewhere.
+  mainWindow.webContents.on('before-input-event', (_event, input) => {
+    if (input.type !== 'keyDown') return;
+    const mod = process.platform === 'darwin' ? input.meta : input.control;
+    if (!mod) return;
+    if (input.alt) return; // don't shadow Alt+Ctrl combos
+    const wc = mainWindow?.webContents;
+    if (!wc) return;
+    // Native Chromium + Application Menu accelerators are unreliable on
+    // Windows when the title bar is hidden — the menu bar never renders so
+    // its accelerators never fire. We forward the standard edit shortcuts to
+    // the WebContents commands directly. This is exactly what worked in rc23.
+    switch (input.key.toLowerCase()) {
+      case 'c': if (!input.shift) wc.copy(); break;
+      case 'v': if (!input.shift) wc.paste(); break;
+      case 'x': if (!input.shift) wc.cut(); break;
+      case 'z': input.shift ? wc.redo() : wc.undo(); break;
+      case 'y': wc.redo(); break;
+      case 'a':
+        if (input.shift) break;
+        // wc.selectAll() races with renderer's native handler in inputs and
+        // gets reverted; do the selection imperatively instead.
+        wc.executeJavaScript(`(() => {
+          const el = document.activeElement;
+          if (!el) return;
+          if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {
+            try { el.select(); } catch {}
+          } else if (el.isContentEditable) {
+            const r = document.createRange();
+            r.selectNodeContents(el);
+            const s = window.getSelection();
+            if (s) { s.removeAllRanges(); s.addRange(r); }
+          } else {
+            try { document.execCommand('selectAll'); } catch {}
+          }
+        })();`, true).catch(() => {});
+        break;
+    }
+  });
+
+  // ── Right-click context menu with copy/paste ──────────────────────────────
+  // Electron has no default context menu on Windows, which made users think
+  // copy/paste was broken. Build a minimal one based on what the click landed on.
+  mainWindow.webContents.on('context-menu', (_event, params) => {
+    const items: Electron.MenuItemConstructorOptions[] = [];
+    const hasSelection = params.selectionText && params.selectionText.trim().length > 0;
+    if (params.isEditable) {
+      items.push(
+        { label: 'Undo', role: 'undo', enabled: params.editFlags.canUndo },
+        { label: 'Redo', role: 'redo', enabled: params.editFlags.canRedo },
+        { type: 'separator' },
+        { label: 'Cut', role: 'cut', enabled: params.editFlags.canCut },
+        { label: 'Copy', role: 'copy', enabled: params.editFlags.canCopy },
+        { label: 'Paste', role: 'paste', enabled: params.editFlags.canPaste },
+        { type: 'separator' },
+        { label: 'Select All', role: 'selectAll', enabled: params.editFlags.canSelectAll },
+      );
+    } else if (hasSelection) {
+      items.push(
+        { label: 'Copy', click: () => clipboard.writeText(params.selectionText) },
+      );
+    }
+    if (items.length === 0) return;
+    Menu.buildFromTemplate(items).popup({ window: mainWindow! });
   });
 }
 
